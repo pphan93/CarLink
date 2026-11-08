@@ -161,7 +161,9 @@ fun SettingsScreen(vm: CarLinkViewModel, onBack: () -> Unit, navigate: (Route) -
         overlayAllowed = overlayAllowed,
         carBrand = vehicle.brand,
         detectedBrand = vehicle.detected,
-        stereoBluetoothExternal = stereoBluetooth?.classification?.blocksWireless == true,
+        stereoBluetoothExternal = stereoBluetooth?.let {
+            com.carlink.core.connection.DeviceEnvironment.effective(connection.useAndroidBluetooth, connection.useStereoBluetooth, it)
+        }?.blocksWireless == true,
         stereoBluetoothFyt = stereoBluetooth?.classification == com.carlink.core.detect.StereoBluetooth.FYT_MODULE,
         liveEngine = link.engine?.takeIf { link.stage == com.carlink.core.core.LinkStage.CONNECTED }
             ?.let { com.carlink.app.ui.components.engineName(it) },

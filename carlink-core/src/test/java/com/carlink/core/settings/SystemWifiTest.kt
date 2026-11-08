@@ -56,4 +56,9 @@ class SystemWifiTest {
         assertNull(SystemWifi.parseSavedPassword(xml, "Raw"))
         assertNull(SystemWifi.parseSavedPassword(xml, "Missing"))
     }
+
+    @Test fun hotspotStartCommandQuotesNameAndPassword() {
+        assertEquals("cmd wifi start-softap 'Car AP' wpa2 'pa ss'", SystemWifi.startSoftApCommand(WifiDetails("Car AP", "pa ss")))
+        assertEquals("cmd wifi start-softap 'Bob'\\''s car' open", SystemWifi.startSoftApCommand(WifiDetails("Bob's car", "")))
+    }
 }

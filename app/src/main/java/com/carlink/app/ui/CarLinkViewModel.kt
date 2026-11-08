@@ -70,6 +70,8 @@ data class ConnectionPrefs(
     val wirelessOnExternalBluetooth: Boolean = false,
     /** Home's Bluetooth chooser: this screen's own Bluetooth instead of the stereo's module. */
     val useAndroidBluetooth: Boolean = false,
+    /** Home's Bluetooth chooser: the stereo's module, even where the probe judged it a false positive. */
+    val useStereoBluetooth: Boolean = false,
     /** Settings › Connection › Root mode (advanced). */
     val rootMode: Boolean = false,
     /** "Android Auto on this screen (experimental)" (Settings › Connection, advanced). */
@@ -266,7 +268,7 @@ class CarLinkViewModel(application: Application) : AndroidViewModel(application)
     val wirelessUnavailable: StateFlow<Boolean> = combine(_stereoBluetooth, _connection) { report, prefs ->
         // Setup's pairing step: the module setting only ever unblocks Android Auto.
         report != null && com.carlink.core.connection.DeviceEnvironment.wirelessBlocked(
-            com.carlink.core.connection.DeviceEnvironment.effective(prefs.useAndroidBluetooth, report.classification),
+            com.carlink.core.connection.DeviceEnvironment.effective(prefs.useAndroidBluetooth, prefs.useStereoBluetooth, report),
             prefs.wirelessOnExternalBluetooth, com.carlink.core.core.Engine.ANDROID_AUTO)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
@@ -574,6 +576,7 @@ class CarLinkViewModel(application: Application) : AndroidViewModel(application)
     /** Home's Bluetooth chooser: the stereo's module, or this screen's own Bluetooth. */
     fun setUseAndroidBluetooth(on: Boolean) {
         preferences.useAndroidBluetooth = on
+        preferences.useStereoBluetooth = !on
         _connection.value = readConnection()
         phonesRepository.refresh()
         com.carlink.core.diagnostics.EventLog.add("CarLink", "Bluetooth: ${if (on) "this screen's own" else "the stereo's module"}")
@@ -640,7 +643,7 @@ class CarLinkViewModel(application: Application) : AndroidViewModel(application)
     private fun readConnection() = ConnectionPrefs(
         preferences.autoConnectUsb, preferences.autoConnectBluetooth, preferences.startOnBoot, autoConnectPaused = false,
         floatingSwitcher = uiPreferences.floatingSwitcher, wirelessOnExternalBluetooth = preferences.wirelessOnExternalBluetooth,
-        useAndroidBluetooth = preferences.useAndroidBluetooth, rootMode = preferences.rootMode, androidAutoOnScreen = preferences.androidAutoOnScreen,
+        useAndroidBluetooth = preferences.useAndroidBluetooth, useStereoBluetooth = preferences.useStereoBluetooth, rootMode = preferences.rootMode, androidAutoOnScreen = preferences.androidAutoOnScreen,
         androidAutoInstalled = runCatching { app.packageManager.getPackageInfo(ANDROID_AUTO_PACKAGE, 0) }.isSuccess,
         // The check Android Auto itself fails on: it starts this activity when a head unit connects.
         androidAutoCanRunCar = runCatching {

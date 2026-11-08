@@ -86,6 +86,26 @@ class DeviceEnvironment(
         lastPhone(app).edit().putString(KEY_LAST_PHONE, phoneAddress).apply()
     }
 
+    override fun turnOnCarHotspot(done: (Boolean) -> Unit): Boolean {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) return false
+        kotlin.concurrent.thread(name = "carlink-hotspot-on", isDaemon = true) {
+            // The details the driver saved, else the stereo's own (read the same way, no prompt).
+            val details = unified.load().carHotspot.takeIf { it.ssid.isNotBlank() }
+                ?: com.carlink.core.settings.SystemWifi.readHotspot(app, allowRoot = preferences.rootMode)
+            val sent = details != null && com.carlink.core.settings.SystemWifi.startHotspot(app, details, preferences.rootMode)
+            var on = false
+            if (sent) {
+                val until = android.os.SystemClock.uptimeMillis() + HOTSPOT_ON_WAIT_MILLIS
+                while (!on && android.os.SystemClock.uptimeMillis() < until) {
+                    on = runCatching { com.shilapi.xcertplay.network.CarHotspotStatus.isEnabled(app) }.getOrNull() == true
+                    if (!on) Thread.sleep(500)
+                }
+            }
+            done(on)
+        }
+        return true
+    }
+
     override fun usbSerial(attach: android.content.Intent?): String? = runCatching {
         val device = if (android.os.Build.VERSION.SDK_INT >= 33)
             attach?.getParcelableExtra(UsbManager.EXTRA_DEVICE, android.hardware.usb.UsbDevice::class.java)
@@ -154,6 +174,8 @@ class DeviceEnvironment(
     companion object {
         private const val TAG = "CarLink-Session"
         private const val KEY_LAST_PHONE = "address"
+        /** How long the hotspot may take to report on after the start command. */
+        private const val HOTSPOT_ON_WAIT_MILLIS = 8_000L
         /**
          * Android-Bluetooth problems that do not apply when the stereo's module carries Bluetooth.
          * No iPhone chosen too: the iPhone pairs with the module, which names it to the engine (#32).
@@ -169,21 +191,29 @@ class DeviceEnvironment(
          * driver's "Wireless through the stereo's Bluetooth module (experimental)" ([moduleOn]).
          */
         /** The stereo as CarLink routes it: no module when the driver chose Android's own Bluetooth (Home's chip). */
-        fun effective(context: Context, stereo: StereoBluetooth): StereoBluetooth =
-            effective(CarLinkPreferences(context).useAndroidBluetooth, stereo)
+        fun effective(context: Context, report: com.carlink.core.detect.StereoBluetoothReport): StereoBluetooth =
+            CarLinkPreferences(context).let { effective(it.useAndroidBluetooth, it.useStereoBluetooth, report) }
 
-        /** The driver picked this screen's own Bluetooth on Home: the module is ignored, as if absent. */
-        fun effective(useAndroidBluetooth: Boolean, stereo: StereoBluetooth): StereoBluetooth =
-            if (useAndroidBluetooth) StereoBluetooth.NONE else stereo
+        /**
+         * The driver's pick on Home wins over the probe: this screen's own Bluetooth ignores the
+         * module, as if absent; the stereo's module is used even where a phone bonded to Android
+         * made the probe call it a likely false positive.
+         */
+        fun effective(useAndroidBluetooth: Boolean, useStereoBluetooth: Boolean, report: com.carlink.core.detect.StereoBluetoothReport): StereoBluetooth =
+            when {
+                useAndroidBluetooth -> StereoBluetooth.NONE
+                useStereoBluetooth && report.classification == StereoBluetooth.LIKELY_FALSE_POSITIVE -> report.moduleOnly
+                else -> report.classification
+            }
 
-        fun effectiveStereo(context: Context): StereoBluetooth = effective(context, ExternalBluetoothProbe.current(context).classification)
+        fun effectiveStereo(context: Context): StereoBluetooth = effective(context, ExternalBluetoothProbe.current(context))
 
         fun moduleEnabled(stereo: StereoBluetooth, moduleOn: Boolean): Boolean =
             moduleOn || stereo == StereoBluetooth.ZLINK_DAEMON
 
         /** This stereo's module carries Bluetooth for at least one engine (probe finished; [moduleEnabled]). */
         fun moduleCarriesBluetooth(context: Context): Boolean =
-            ExternalBluetoothProbe.cached()?.classification?.let { effective(context, it) }?.let { stereo ->
+            ExternalBluetoothProbe.cached()?.let { effective(context, it) }?.let { stereo ->
                 stereo.blocksWireless && moduleEnabled(stereo, CarLinkPreferences(context).wirelessOnExternalBluetooth)
             } == true
 

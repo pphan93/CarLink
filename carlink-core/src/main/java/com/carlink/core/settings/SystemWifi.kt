@@ -116,6 +116,39 @@ object SystemWifi {
         .replace(Regex("&#(x?)([0-9a-fA-F]+);")) { m -> m.groupValues[2].toInt(if (m.groupValues[1].isEmpty()) 10 else 16).toChar().toString() }
         .replace("&quot;", "\"").replace("&apos;", "'").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
 
+    /**
+     * Starts the hotspot as [details] with the head unit's own shell (`cmd wifi start-softap`, Android
+     * 11+), through local ADB the driver already approved (never asks here), else root when [allowRoot].
+     * No ordinary app may switch the hotspot on. Blocks up to ~15 s; true when the command ran.
+     */
+    fun startHotspot(context: Context, details: WifiDetails, allowRoot: Boolean): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || details.ssid.isBlank()) return false
+        val command = startSoftApCommand(details)
+        val viaAdb = runCatching {
+            LocalAdb(AdbKeys.load(context)).use { adb ->
+                adb.connect(mayAsk = false) == LocalAdb.Access.READY && adb.shell(command) != null
+            }
+        }.getOrDefault(false)
+        log("hotspot start through local ADB: ${if (viaAdb) "sent" else "not available"}")
+        if (viaAdb) return true
+        if (!allowRoot) return false
+        val viaRoot = runCatching {
+            val process = ProcessBuilder("su", "-c", command).start()
+            val waiter = thread(isDaemon = true) { runCatching { process.waitFor() } }
+            waiter.join(20_000)
+            if (waiter.isAlive) { process.destroy(); false } else process.exitValue() == 0
+        }.getOrDefault(false)
+        log("hotspot start as root: ${if (viaRoot) "sent" else "refused"}")
+        return viaRoot
+    }
+
+    /** The shell command for [startHotspot]; the name and password are single-quoted for the shell. */
+    internal fun startSoftApCommand(details: WifiDetails): String {
+        fun quote(text: String) = "'" + text.replace("'", "'\\''") + "'"
+        return if (details.password.isEmpty()) "cmd wifi start-softap ${quote(details.ssid)} open"
+        else "cmd wifi start-softap ${quote(details.ssid)} wpa2 ${quote(details.password)}"
+    }
+
     /** [path]'s bytes read as root, or null without `su`, on refusal, or after 20 s. */
     private fun su(path: String): ByteArray? = runCatching {
         val process = ProcessBuilder("su", "-c", "cat '$path' 2>/dev/null").start()

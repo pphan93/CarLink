@@ -228,7 +228,12 @@ fun HomeScreen(vm: CarLinkViewModel, navigate: (Route) -> Unit) {
         }
     }
     var choosingBluetooth by remember { mutableStateOf(false) }
-    val moduleDetected by rememberUpdatedState(stereo?.classification?.blocksWireless == true)
+    // The module's own markers, so the choice is offered where a phone bonded to Android made the
+    // probe call the module a likely false positive.
+    val moduleDetected by rememberUpdatedState(stereo?.moduleOnly?.blocksWireless == true)
+    val effectiveStereo = stereo?.let {
+        com.carlink.core.connection.DeviceEnvironment.effective(connection.useAndroidBluetooth, connection.useStereoBluetooth, it)
+    }
     val actions = remember(vm) {
         object : HomeActions {
             override fun chooseBluetooth() = if (moduleDetected) choosingBluetooth = true else vm.openBluetoothSettings()
@@ -255,7 +260,7 @@ fun HomeScreen(vm: CarLinkViewModel, navigate: (Route) -> Unit) {
         }
     }
     HomeContent(HomeUi(home, connection, network, permissionsNeeded, usual,
-        stereo?.classification?.let { com.carlink.core.connection.DeviceEnvironment.effective(connection.useAndroidBluetooth, it) },
+        effectiveStereo,
         failureReport?.quickUrl, failureReport?.qrText), actions)
     // A second USB phone: the floating overlay asks over any screen; without the overlay
     // permission Home asks itself.
@@ -268,7 +273,7 @@ fun HomeScreen(vm: CarLinkViewModel, navigate: (Route) -> Unit) {
     }
     val pendingChoice by vm.pendingChoice.collectAsStateWithLifecycle()
     pendingChoice?.let { phones -> ChoosePhoneDialog(phones, onPick = vm::choosePhone, onDismiss = vm::dismissChoice) }
-    if (choosingBluetooth) BluetoothSheet(connection.useAndroidBluetooth, onPick = vm::setUseAndroidBluetooth,
+    if (choosingBluetooth) BluetoothSheet(effectiveStereo?.blocksWireless != true, onPick = vm::setUseAndroidBluetooth,
         onSettings = vm::openBluetoothSettings, onDismiss = { choosingBluetooth = false })
 }
 

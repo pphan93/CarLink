@@ -207,6 +207,13 @@ class SessionManager(
          * not held for it: its own dial waits for the page ([BluetoothWarmup.awaitPage]).
          */
         fun warmUp(request: SessionRequest, done: () -> Unit): Boolean = false
+
+        /**
+         * The car hotspot is the path to use and it is off: switch it on where CarLink can (the head
+         * unit's own shell, or root). Calls [done] (any thread) with whether it came on; returns
+         * false when it cannot try.
+         */
+        fun turnOnCarHotspot(done: (Boolean) -> Unit): Boolean = false
     }
 
     private val _state = MutableStateFlow<SessionState>(SessionState.Idle)
@@ -227,6 +234,8 @@ class SessionManager(
 
     /** Increases with every new session or stop; events from older sessions are ignored. */
     private var token = 0
+    /** The session [token] that already tried to switch the car hotspot on (once per start). */
+    private var hotspotTriedFor = -1
     private var running: Engine? = null
     private var stopping = 0
     private val afterStop = ArrayDeque<() -> Unit>()
@@ -673,6 +682,18 @@ class SessionManager(
         if (problems.isNotEmpty()) {
             note("${request.engine} blocked on ${path ?: "USB"}: $problems")
             _state.value = SessionState.Blocked(request, problems)
+            // The hotspot was the only thing missing: switch it on and start again (once per start).
+            if (problems == listOf(Problem.CAR_HOTSPOT_OFF) && hotspotTriedFor != sessionToken) {
+                hotspotTriedFor = sessionToken
+                val trying = environment.turnOnCarHotspot { on ->
+                    main.post {
+                        if (sessionToken != token || _state.value !is SessionState.Blocked) return@post
+                        note(if (on) "car hotspot is on; starting again" else "could not switch the car hotspot on")
+                        if (on) begin(request, paths, index, sessionToken, phase, notice, warm)
+                    }
+                }
+                if (trying) note("switching the car hotspot on")
+            }
             return
         }
         // Only past the preflight: paging a blocked iPhone brought its Bluetooth link up, which

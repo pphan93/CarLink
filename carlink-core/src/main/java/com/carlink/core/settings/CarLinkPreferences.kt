@@ -51,6 +51,16 @@ class CarLinkPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_USE_ANDROID_BT, false)
         set(value) = prefs.edit().putBoolean(KEY_USE_ANDROID_BT, value).apply()
 
+    /**
+     * The driver chose the stereo's Bluetooth module on Home. CarLink then uses the module even when
+     * its check judged it a likely false positive because a phone is also paired with Android's
+     * Bluetooth: on a ZLink head unit that re-pairs the iPhone with Android at every start, only the
+     * module carries CarPlay's iAP2, and the choice reverted to "normal" after each restart (2026-11-08).
+     */
+    var useStereoBluetooth: Boolean
+        get() = prefs.getBoolean(KEY_USE_STEREO_BT, false)
+        set(value) = prefs.edit().putBoolean(KEY_USE_STEREO_BT, value).apply()
+
     var wirelessOnExternalBluetooth: Boolean
         get() = prefs.getBoolean(KEY_WIRELESS_EXTERNAL_BT, true)
         set(value) = prefs.edit().putBoolean(KEY_WIRELESS_EXTERNAL_BT, value).apply()
@@ -75,6 +85,7 @@ class CarLinkPreferences(context: Context) {
         private const val KEY_START_ON_BOOT = "start_on_boot"
         private const val KEY_WIRELESS_EXTERNAL_BT = "wireless_on_external_bluetooth"
         private const val KEY_USE_ANDROID_BT = "use_android_bluetooth"
+        private const val KEY_USE_STEREO_BT = "use_stereo_bluetooth"
         private const val KEY_ROOT_MODE = "root_mode"
         private const val KEY_AA_ON_SCREEN = "android_auto_on_screen"
         private const val KEY_PAUSED_AT = "auto_connect_paused_at"

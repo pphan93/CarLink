@@ -83,6 +83,15 @@ class SessionManagerTest {
         override fun wirelessPaths(request: SessionRequest) = paths
         override fun rememberWorkingPath(engine: Engine, phoneAddress: String, path: WirelessPath) { remembered += phoneAddress to path }
         override fun rememberPhone(phoneAddress: String, kind: PhoneKind?, name: String?) { rememberedKinds += phoneAddress to kind }
+        var hotspotComesOn: Boolean? = null
+        var hotspotTries = 0
+        override fun turnOnCarHotspot(done: (Boolean) -> Unit): Boolean {
+            val on = hotspotComesOn ?: return false
+            hotspotTries++
+            if (on) problems = { _, _ -> emptyList() }
+            done(on)
+            return true
+        }
         var connected: List<PhoneOption> = emptyList()
         var moduleWait: Long? = null
         var serials: (Intent?) -> String? = { null }
@@ -144,6 +153,26 @@ class SessionManagerTest {
         assertEquals(1, starts.size)
         m.connect("CC:DD", PhoneKind.IPHONE, "Other"); idle()
         assertEquals(2, starts.size)
+    }
+
+    @Test fun anOffCarHotspotIsSwitchedOnAndTheSessionStarts() {
+        problems = { _, _ -> listOf(Problem.CAR_HOTSPOT_OFF) }
+        env.hotspotComesOn = true
+        val m = manager()
+        m.connect("AA:BB", PhoneKind.IPHONE, "iPhone"); idle()
+        assertEquals(1, env.hotspotTries)
+        assertEquals(1, starts.size)
+        assertTrue(m.state.value is SessionState.Active)
+    }
+
+    @Test fun aCarHotspotThatStaysOffIsTriedOnceAndStaysBlocked() {
+        problems = { _, _ -> listOf(Problem.CAR_HOTSPOT_OFF) }
+        env.hotspotComesOn = false
+        val m = manager()
+        m.connect("AA:BB", PhoneKind.IPHONE, "iPhone"); idle()
+        assertEquals(1, env.hotspotTries)
+        assertTrue(starts.isEmpty())
+        assertEquals(listOf(Problem.CAR_HOTSPOT_OFF), (m.state.value as SessionState.Blocked).problems)
     }
 
     @Test fun blockedRequestsNeverOpenAnEngine() {

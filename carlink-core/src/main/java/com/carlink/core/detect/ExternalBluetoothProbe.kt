@@ -111,6 +111,12 @@ data class StereoBluetoothReport(
     /** Whether `/dev/socket/zj_bt_socket` accepted a connect; checked only with ZLink markers and 3152 closed. */
     val zjSocket: PortState = PortState.NOT_CHECKED,
 ) {
+    /**
+     * What the module markers alone say, without the "a known phone is bonded to Android" rule: the
+     * module's own type where [classification] is [StereoBluetooth.LIKELY_FALSE_POSITIVE].
+     */
+    val moduleOnly: StereoBluetooth get() = ExternalBluetoothProbe.classify(signals, adapter, emptyList(), zjSocket)
+
     /** One structured block for carlink.log and the shared log. Never holds a hardware address. */
     fun format(): String = buildString {
         append("External Bluetooth probe: classification=").append(classification)
