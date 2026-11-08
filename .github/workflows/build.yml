@@ -1,0 +1,67 @@
+# Builds CarLink's APK on demand (Actions › Build APK › Run workflow) and attaches it to the run.
+# With the secrets below it is the signed release APK with CarPlay; without them, a debug APK
+# (Android Auto only, no updater). It never tags or publishes: releases still go through
+# scripts/release.sh (docs/RELEASING.md).
+#
+# Secrets (Settings › Secrets and variables › Actions), all optional:
+#   CARLINK_MFI_TGZ_B64        base64 of `tar czf - -C ~/.carlink-private offline-mfi`
+#   ANDROID_KEYSTORE_B64       base64 of the release keystore file
+#   ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+name: Build APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Restore the CarPlay authentication files
+        env:
+          MFI: ${{ secrets.CARLINK_MFI_TGZ_B64 }}
+        if: env.MFI != ''
+        run: |
+          mkdir -p "$RUNNER_TEMP/carlink-private"
+          echo "$MFI" | base64 -d | tar xzf - -C "$RUNNER_TEMP/carlink-private"
+          test -f "$RUNNER_TEMP/carlink-private/offline-mfi/identity.pk8"
+          echo "DIPLAY_AUTH_ASSETS_DIR=$RUNNER_TEMP/carlink-private" >> "$GITHUB_ENV"
+
+      - name: Restore the release signing key
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        if: env.KEYSTORE != ''
+        run: |
+          echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+          echo "SIGNED=1" >> "$GITHUB_ENV"
+
+      - name: Build
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ "${SIGNED:-}" = 1 ]; then
+            ./gradlew --no-daemon :app:assembleRelease
+          else
+            ./gradlew --no-daemon :app:assembleDebug
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CarLink-${{ github.sha }}
+          path: app/build/outputs/apk/**/*.apk
+          retention-days: 14
