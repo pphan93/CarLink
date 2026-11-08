@@ -4,6 +4,15 @@ CarLink's releases, newest first. Versions follow `major.minor.patch`; each one 
 [GitHub](https://github.com/pphan93/CarLink/releases) with its APK. The text under each version
 is what the in-app update popup shows.
 
+## [1.0.15] - 2026-11-08
+
+- Fixed: an iPhone with a custom name could still be started as Android Auto on head units whose
+  Bluetooth is a separate module. A phone that only shows music Bluetooth to the head unit is no
+  longer guessed to be Android: CarLink asks "iPhone or Android?" once instead.
+- Fixed: tapping a phone on Home saved its detected type, so a wrong guess stuck for good. Only a
+  connection or your own answer saves the type now, and old guessed Android types are cleared
+  once after the update (for phones that never connected to Android Auto wirelessly).
+
 ## [1.0.14] - 2026-11-08
 
 - First release from this fork (pphan93/CarLink), signed with its own key. It cannot update the
