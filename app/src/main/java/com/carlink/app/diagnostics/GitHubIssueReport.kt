@@ -26,7 +26,7 @@ import java.util.TimeZone
  * they stay empty, so the labels below must match the form word for word (a test reads the form).
  */
 object GitHubIssueReport {
-    const val NEW_ISSUE = "https://github.com/F-e-n-y-x/CarLink/issues/new"
+    const val NEW_ISSUE = "https://github.com/pphan93/CarLink/issues/new"
     const val TEMPLATE = "bug_report.yml"
 
     /**

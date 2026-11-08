@@ -30,7 +30,7 @@ neither CarPlay nor Android Auto can start wirelessly. Re-pairing or turning Blu
 does not help. Connect the phone with a USB cable (**How to connect** shows how); it works the
 same. Diagnostics shows **Car stereo Bluetooth is a separate module** with what was found. To help
 add wireless for your stereo, tap **Report on GitHub** in Diagnostics (or **Share log** and
-[open an issue](https://github.com/F-e-n-y-x/CarLink/issues/new/choose)): the report says which kind
+[open an issue](https://github.com/pphan93/CarLink/issues/new/choose)): the report says which kind
 of module it is. Details: [design/EXTERNAL_BLUETOOTH.md](../design/EXTERNAL_BLUETOOTH.md).
 
 **Trying wireless Android Auto through the stereo's module (experimental).** Settings ›
@@ -100,7 +100,7 @@ mobile data on the phone.
 
 **"CarPlay can't sign in".** This build has no CarPlay authentication files: you are running a
 build from source. Install the release APK from
-[Releases](https://github.com/F-e-n-y-x/CarLink/releases/latest). Android Auto works either way.
+[Releases](https://github.com/pphan93/CarLink/releases/latest). Android Auto works either way.
 
 **CarPlay: sound but black screen (iOS 27).** The iPhone connects and plays music, touches work,
 but no picture appears and Home stays on **Starting the picture**. On iOS 27 some iPhones open the
@@ -242,7 +242,7 @@ the file from **Share log**.
 
 1. Reproduce it, then open **Settings › General › Diagnostics** and tap **Share log**. The log
    merges CarPlay, Android Auto and CarLink's own decisions, with addresses hidden.
-2. [Open a bug report](https://github.com/F-e-n-y-x/CarLink/issues/new/choose) with: the screen
+2. [Open a bug report](https://github.com/pphan93/CarLink/issues/new/choose) with: the screen
    (head unit or tablet model) and its Android version, the phone and its iOS or Android version,
    CarPlay or Android Auto, USB or wireless (and which wireless method), what you expected and
    what happened, and the log.

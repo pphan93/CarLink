@@ -26,8 +26,8 @@ class ReleaseParserTest {
         assertEquals("v1.1.0", release.tag)
         assertEquals(AppVersion(1, 1, 0), release.version)
         assertEquals("CarLink 1.1.0", release.title)
-        assertEquals("https://github.com/F-e-n-y-x/CarLink/releases/download/v1.1.0/CarLink-1.1.0.apk", release.apkUrl)
-        assertEquals("https://github.com/F-e-n-y-x/CarLink/releases/download/v1.1.0/CarLink-1.1.0.apk.sha256", release.checksumUrl)
+        assertEquals("https://github.com/pphan93/CarLink/releases/download/v1.1.0/CarLink-1.1.0.apk", release.apkUrl)
+        assertEquals("https://github.com/pphan93/CarLink/releases/download/v1.1.0/CarLink-1.1.0.apk.sha256", release.checksumUrl)
         assertEquals(48_234_567L, release.apkSize)
         assertTrue(release.notes.contains("Faster"))
     }

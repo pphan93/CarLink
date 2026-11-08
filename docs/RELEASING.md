@@ -2,8 +2,10 @@
 
 CarLink releases are built, signed and uploaded **on the maintainer's computer**, never by GitHub
 Actions. Two things exist only on that computer: the release signing key and the CarPlay
-accessory identity (`offline-mfi/`). The project uses no GitHub Actions at all: tests run locally
-(`dev.sh test`, and `scripts/release.sh` runs them before every release).
+accessory identity (`offline-mfi/`). Tests run locally (`dev.sh test`, and `scripts/release.sh`
+runs them before every release). The one GitHub workflow, `.github/workflows/build.yml` (started by
+hand), only builds a test APK: signed with CarPlay when the owner has stored the key and identity as
+Actions secrets, a debug APK otherwise. It never tags or publishes.
 
 Installed copies of CarLink find new versions through GitHub's "latest release" API and install
 them only after checking them (see "What the app checks" below). A release is therefore
@@ -47,7 +49,7 @@ refuses to publish a page that still contains a `{{placeholder}}`.
 | `~/.carlink-private/offline-mfi/` | the CarPlay accessory identity (`identity.pk8`, `certificate.p7b`) |
 
 The certificate's SHA-256 is
-`03:74:68:CA:5B:EB:70:EA:5F:68:54:33:29:B0:33:68:24:7D:FB:39:3D:3F:62:6A:6B:47:2D:10:E5:65:7D:21`.
+`ED:EB:2D:19:B8:C6:4D:53:D0:0A:01:32:46:FE:17:39:76:93:63:81:87:1B:FD:56:5B:64:C9:36:CE:75:70:38`.
 It is pinned in `app/src/main/java/com/carlink/app/update/UpdateVerifier.kt` (`ReleaseKey`), and
 `scripts/release.sh` reads it from there.
 
@@ -119,7 +121,7 @@ The updater lives in `app/src/main/java/com/carlink/app/update/` (logic, no UI) 
 
 - Only the release package `com.carlink.app`, signed with the pinned key, checks for updates.
   Debug builds (`com.carlink.app.hudtest`) and builds signed with any other key never do.
-- `GET https://api.github.com/repos/F-e-n-y-x/CarLink/releases/latest`, at most every 6 hours
+- `GET https://api.github.com/repos/pphan93/CarLink/releases/latest`, at most every 6 hours
   (Home in front, setup finished, "Automatically check for updates" on, and no projection
   session starting, running or asking to switch), or when the driver taps Check for updates.
   GitHub's rate limits (403/429) are handled quietly.

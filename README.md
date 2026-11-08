@@ -10,12 +10,12 @@
 
 **CarPlay and Android Auto in one app, for any Android car stereo or tablet.**
 
-[![Latest release](https://img.shields.io/github/v/release/F-e-n-y-x/CarLink?label=release)](https://github.com/F-e-n-y-x/CarLink/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/F-e-n-y-x/CarLink/total)](https://github.com/F-e-n-y-x/CarLink/releases)
+[![Latest release](https://img.shields.io/github/v/release/pphan93/CarLink?label=release)](https://github.com/pphan93/CarLink/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/pphan93/CarLink/total)](https://github.com/pphan93/CarLink/releases)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 [![Android 7.1+](https://img.shields.io/badge/Android-7.1%2B%20(API%2025)-3DDC84?logo=android&logoColor=white)](#requirements)
 
-[**Download**](https://github.com/F-e-n-y-x/CarLink/releases/latest) ·
+[**Download**](https://github.com/pphan93/CarLink/releases/latest) ·
 [Install](#install) · [User guide](docs/USER_GUIDE.md) ·
 [Troubleshooting](docs/TROUBLESHOOTING.md) · [Docs](docs/README.md)
 
@@ -86,7 +86,7 @@ screens with sample data, not captured from a phone. Every screen and state, on 
 
 ## Install
 
-1. Open [Releases](https://github.com/F-e-n-y-x/CarLink/releases/latest) on the display (or on a
+1. Open [Releases](https://github.com/pphan93/CarLink/releases/latest) on the display (or on a
    computer, then copy the file over by USB stick or cable).
 2. Download `CarLink-X.Y.Z.apk`. To check the file, compare its SHA-256 with the
    `CarLink-X.Y.Z.apk.sha256` file of the same release (`sha256sum -c CarLink-X.Y.Z.apk.sha256`).
@@ -97,15 +97,15 @@ screens with sample data, not captured from a phone. Every screen and state, on 
 
 **Add to Obtainium.** [Obtainium](https://github.com/ImranR98/Obtainium) can track CarLink's GitHub
 releases and install each new one: in Obtainium tap **Add app** and paste
-`https://github.com/F-e-n-y-x/CarLink`, or open `obtainium://add/https://github.com/F-e-n-y-x/CarLink`
+`https://github.com/pphan93/CarLink`, or open `obtainium://add/https://github.com/pphan93/CarLink`
 on a device that has Obtainium ([deep links](https://wiki.obtainium.imranr.dev/deep_links/)).
 
-Each [release page](https://github.com/F-e-n-y-x/CarLink/releases) repeats these steps with the
+Each [release page](https://github.com/pphan93/CarLink/releases) repeats these steps with the
 APK's own SHA-256 and the signing certificate.
 
 The release's package is `com.carlink.app`. It is signed with CarLink's own release key
 (certificate SHA-256
-`03:74:68:CA:5B:EB:70:EA:5F:68:54:33:29:B0:33:68:24:7D:FB:39:3D:3F:62:6A:6B:47:2D:10:E5:65:7D:21`;
+`ED:EB:2D:19:B8:C6:4D:53:D0:0A:01:32:46:FE:17:39:76:93:63:81:87:1B:FD:56:5B:64:C9:36:CE:75:70:38`;
 how to check it with `apksigner`: [user guide](docs/USER_GUIDE.md#install)). An APK signed with
 another key is not an official build and cannot update it.
 
@@ -183,7 +183,7 @@ Home shows. To report a bug from the stereo itself, tap **Report on GitHub** (on
 couldn't connect, or in **Settings › General › Diagnostics**): the stereo's browser opens a new
 issue with the version, the screen, the error and a log excerpt filled in, and you tap Submit
 (the browser must be signed in to GitHub). Or use **Share log** and
-[open an issue](https://github.com/F-e-n-y-x/CarLink/issues/new/choose) yourself.
+[open an issue](https://github.com/pphan93/CarLink/issues/new/choose) yourself.
 
 ## CarPlay notice
 

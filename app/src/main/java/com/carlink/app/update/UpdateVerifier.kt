@@ -6,7 +6,7 @@ import java.security.MessageDigest
 /** CarLink's release signing key. An update is installed only when its APK is signed by it. */
 object ReleaseKey {
     /** SHA-256 of the release certificate (`apksigner verify --print-certs`, scripts/release.sh). */
-    const val CERT_SHA256 = "03:74:68:CA:5B:EB:70:EA:5F:68:54:33:29:B0:33:68:24:7D:FB:39:3D:3F:62:6A:6B:47:2D:10:E5:65:7D:21"
+    const val CERT_SHA256 = "ED:EB:2D:19:B8:C6:4D:53:D0:0A:01:32:46:FE:17:39:76:93:63:81:87:1B:FD:56:5B:64:C9:36:CE:75:70:38"
 
     /** Lower-case hex without separators, so `03:74:…` and `0374…` compare equal. */
     fun normalize(fingerprint: String): String = fingerprint.filter { it.isLetterOrDigit() }.lowercase()

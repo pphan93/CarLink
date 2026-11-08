@@ -17,7 +17,7 @@ apksigner verify --print-certs CarLink-X.Y.Z.apk
 ```
 
 `apksigner` must show exactly one signer, with
-`Signer #1 certificate SHA-256 digest: 037468ca5beb70ea5f68543329b03368247dfb393d3f626a6b472d10e5657d21`
+`Signer #1 certificate SHA-256 digest: edeb2d19b8c64d53d00a013246fe173976936381871bfd565b64c936ce757038`
 (the README's colon-separated fingerprint, written without colons). An APK signed with any other
 key is not CarLink's release: Android refuses to install it over the release, and the updater ignores it.
 

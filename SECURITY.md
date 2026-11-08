@@ -5,14 +5,14 @@ security.
 
 ## Supported versions
 
-Only the latest release on [GitHub Releases](https://github.com/F-e-n-y-x/CarLink/releases/latest)
+Only the latest release on [GitHub Releases](https://github.com/pphan93/CarLink/releases/latest)
 gets fixes. The in-app updater offers new releases to installed copies.
 
 ## Reporting a vulnerability
 
 Please do not open a public issue for a security problem. Report it privately through GitHub:
 **Security › Report a vulnerability** on this repository
-([direct link](https://github.com/F-e-n-y-x/CarLink/security/advisories/new)). If that is not
+([direct link](https://github.com/pphan93/CarLink/security/advisories/new)). If that is not
 available, open an issue that asks for a private contact, without any details.
 
 Include the CarLink version, the device and Android version, what an attacker can do and the
@@ -35,7 +35,7 @@ release.
   ([docs/RELEASING.md › What the app checks](docs/RELEASING.md#what-the-app-checks)). A way
   around any of these checks is a vulnerability.
 - **The release signing key** exists only on the maintainer's computer. Its certificate SHA-256
-  is `03:74:68:CA:5B:EB:70:EA:5F:68:54:33:29:B0:33:68:24:7D:FB:39:3D:3F:62:6A:6B:47:2D:10:E5:65:7D:21`.
+  is `ED:EB:2D:19:B8:C6:4D:53:D0:0A:01:32:46:FE:17:39:76:93:63:81:87:1B:FD:56:5B:64:C9:36:CE:75:70:38`.
   An APK signed with another key is not an official build.
 - **The connection log** hides phone addresses, but it describes your devices and networks. Look
   through it before you post it publicly.

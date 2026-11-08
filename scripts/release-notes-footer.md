@@ -2,9 +2,9 @@
 
 | Ready | Connecting | Car brand |
 |---|---|---|
-| ![Home, ready to connect](https://raw.githubusercontent.com/F-e-n-y-x/CarLink/{{TAG}}/docs/screenshots/home/home_ready-iphone-usual_tablet_dark.webp) | ![Connecting by cable](https://raw.githubusercontent.com/F-e-n-y-x/CarLink/{{TAG}}/docs/screenshots/home/home_connecting-carplay-usb_tablet_dark.webp) | ![Car brand picker](https://raw.githubusercontent.com/F-e-n-y-x/CarLink/{{TAG}}/docs/screenshots/setup/setup_car_tablet_dark.webp) |
+| ![Home, ready to connect](https://raw.githubusercontent.com/pphan93/CarLink/{{TAG}}/docs/screenshots/home/home_ready-iphone-usual_tablet_dark.webp) | ![Connecting by cable](https://raw.githubusercontent.com/pphan93/CarLink/{{TAG}}/docs/screenshots/home/home_connecting-carplay-usb_tablet_dark.webp) | ![Car brand picker](https://raw.githubusercontent.com/pphan93/CarLink/{{TAG}}/docs/screenshots/setup/setup_car_tablet_dark.webp) |
 
-More in the [screenshot gallery](https://github.com/F-e-n-y-x/CarLink/tree/{{TAG}}/docs/screenshots).
+More in the [screenshot gallery](https://github.com/pphan93/CarLink/tree/{{TAG}}/docs/screenshots).
 
 ## Download and install
 
@@ -38,11 +38,11 @@ Auto does not depend on it.
 
 ## Source and license
 
-Source for this release: [{{TAG}}](https://github.com/F-e-n-y-x/CarLink/tree/{{TAG}}).
+Source for this release: [{{TAG}}](https://github.com/pphan93/CarLink/tree/{{TAG}}).
 CarLink is AGPL-3.0. It is built on [DiPlay](https://github.com/shihabal3amri/DiPlay) (CarPlay,
 GPL-3.0) and [DiAuto](https://github.com/shihabal3amri/DiAuto) (Android Auto, AGPL-3.0).
 CarLink is not affiliated with Apple or Google; CarPlay is a trademark of Apple Inc. and Android
 Auto a trademark of Google LLC.
 
-Found a problem? See [troubleshooting](https://github.com/F-e-n-y-x/CarLink/blob/main/docs/TROUBLESHOOTING.md),
+Found a problem? See [troubleshooting](https://github.com/pphan93/CarLink/blob/main/docs/TROUBLESHOOTING.md),
 or tap **Report on GitHub** in CarLink (Home or Diagnostics) to open an issue with the log and the error filled in.

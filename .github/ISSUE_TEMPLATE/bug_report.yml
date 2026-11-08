@@ -5,8 +5,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting. First check [Troubleshooting](https://github.com/F-e-n-y-x/CarLink/blob/main/docs/TROUBLESHOOTING.md): Home's message is usually explained there.
-        **Do not post Wi-Fi or hotspot passwords.** Security problems go to [SECURITY.md](https://github.com/F-e-n-y-x/CarLink/blob/main/SECURITY.md), not here.
+        Thanks for reporting. First check [Troubleshooting](https://github.com/pphan93/CarLink/blob/main/docs/TROUBLESHOOTING.md): Home's message is usually explained there.
+        **Do not post Wi-Fi or hotspot passwords.** Security problems go to [SECURITY.md](https://github.com/pphan93/CarLink/blob/main/SECURITY.md), not here.
   - type: input
     id: version
     attributes:

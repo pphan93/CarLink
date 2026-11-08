@@ -245,4 +245,4 @@ Small commits with an imperative subject and a body explaining why. No Claude cr
 no `Co-Authored-By` line, no "Generated with Claude Code" in commits, PRs, releases or issue
 replies (the user's rule, 2026-11-04). Run `$S test` and `$S build` before
 each commit; never push a commit that does not compile. The remote is the user's private repo
-`F-e-n-y-x/CarLink` (`git push` from `main`).
+`pphan93/CarLink` (`git push` from `main`).

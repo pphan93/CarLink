@@ -24,8 +24,8 @@ class UpdateVerifierTest {
 
     @Test fun pinnedFingerprintNormalizes() {
         assertEquals(64, pin.length)
-        assertEquals("037468ca5beb70ea5f68543329b03368247dfb393d3f626a6b472d10e5657d21", pin)
-        assertEquals(pin, ReleaseKey.normalize("03 74 68 ca 5b eb 70 ea 5f 68 54 33 29 b0 33 68 24 7d fb 39 3d 3f 62 6a 6b 47 2d 10 e5 65 7d 21"))
+        assertEquals("edeb2d19b8c64d53d00a013246fe173976936381871bfd565b64c936ce757038", pin)
+        assertEquals(pin, ReleaseKey.normalize("ed eb 2d 19 b8 c6 4d 53 d0 0a 01 32 46 fe 17 39 76 93 63 81 87 1b fd 56 5b 64 c9 36 ce 75 70 38"))
     }
 
     @Test fun passesWhenAllThreeChecksPass() {

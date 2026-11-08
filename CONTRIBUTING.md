@@ -1,7 +1,7 @@
 # Contributing to CarLink
 
 How to build, test and submit a change to CarLink. Bug reports and ideas are welcome too: use the
-[issue forms](https://github.com/F-e-n-y-x/CarLink/issues/new/choose).
+[issue forms](https://github.com/pphan93/CarLink/issues/new/choose).
 
 ## Before you start
 

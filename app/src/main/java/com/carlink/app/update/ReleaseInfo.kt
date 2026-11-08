@@ -5,7 +5,7 @@ import org.json.JSONObject
 
 /** Where CarLink's releases are published (built locally and uploaded; docs/RELEASING.md). */
 object ReleaseRepo {
-    const val OWNER_REPO = "F-e-n-y-x/CarLink"
+    const val OWNER_REPO = "pphan93/CarLink"
     const val LATEST_URL = "https://api.github.com/repos/$OWNER_REPO/releases/latest"
     const val DOWNLOAD_PREFIX = "https://github.com/$OWNER_REPO/releases/download/"
     const val ACCEPT = "application/vnd.github+json"
