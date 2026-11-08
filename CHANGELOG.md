@@ -4,6 +4,13 @@ CarLink's releases, newest first. Versions follow `major.minor.patch`; each one 
 [GitHub](https://github.com/pphan93/CarLink/releases) with its APK. The text under each version
 is what the in-app update popup shows.
 
+## [1.0.17] - 2026-11-08
+
+- On stereos with their own Bluetooth module, choosing "Stereo's Bluetooth module" on Home now
+  sticks after a restart, even when the phone is also paired with the screen's Bluetooth.
+- When CarLink connects through the car hotspot and the hotspot is off, it switches the hotspot on
+  by itself where the stereo allows it (USB debugging approved once, or root).
+
 ## [1.0.16] - 2026-11-08
 
 - Fixed: an iPhone that had once been started as Android Auto was still treated as an Android
