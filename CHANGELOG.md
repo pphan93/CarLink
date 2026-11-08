@@ -1,8 +1,17 @@
 # Changelog
 
 CarLink's releases, newest first. Versions follow `major.minor.patch`; each one is a release on
-[GitHub](https://github.com/F-e-n-y-x/CarLink/releases) with its APK. The text under each version
+[GitHub](https://github.com/pphan93/CarLink/releases) with its APK. The text under each version
 is what the in-app update popup shows.
+
+## [1.0.14] - 2026-11-08
+
+- First release from this fork (pphan93/CarLink), signed with its own key. It cannot update the
+  original CarLink: uninstall that first (its pairings and settings go with it).
+- Fixed: an iPhone could be detected as an Android phone after pairing and was then always sent to
+  Android Auto. CarLink now corrects it as soon as the iPhone shows its Apple-only Bluetooth service.
+- Fixed: wireless Android Auto said "Wireless isn't available on this stereo yet" on head units
+  whose Bluetooth CarLink had already checked and found usable (rw.zlink.bt.type=extra).
 
 ## [1.0.13] - 2026-11-07
 

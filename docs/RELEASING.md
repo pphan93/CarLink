@@ -3,9 +3,12 @@
 CarLink releases are built, signed and uploaded **on the maintainer's computer**, never by GitHub
 Actions. Two things exist only on that computer: the release signing key and the CarPlay
 accessory identity (`offline-mfi/`). Tests run locally (`dev.sh test`, and `scripts/release.sh`
-runs them before every release). The one GitHub workflow, `.github/workflows/build.yml` (started by
-hand), only builds a test APK: signed with CarPlay when the owner has stored the key and identity as
-Actions secrets, a debug APK otherwise. It never tags or publishes.
+runs them before every release). The GitHub workflow `.github/workflows/build.yml` can also release:
+started by hand it builds a test APK (signed with CarPlay when the key and identity are stored as
+Actions secrets, a debug APK otherwise); a pushed tag `vX.Y.Z` builds the signed APK, runs the same
+APK checks as `scripts/release.sh` and publishes the release (bump `versionName` and add the
+`## [X.Y.Z]` CHANGELOG section first, then
+`git tag -a vX.Y.Z -m "CarLink X.Y.Z" && git push origin vX.Y.Z`).
 
 Installed copies of CarLink find new versions through GitHub's "latest release" API and install
 them only after checking them (see "What the app checks" below). A release is therefore

@@ -1,9 +1,12 @@
-# Builds CarLink's APK on demand (Actions › Build APK › Run workflow) and attaches it to the run.
-# With the secrets below it is the signed release APK with CarPlay; without them, a debug APK
-# (Android Auto only, no updater). It never tags or publishes: releases still go through
-# scripts/release.sh (docs/RELEASING.md).
+# Builds CarLink's APK on GitHub.
 #
-# Secrets (Settings › Secrets and variables › Actions), all optional:
+# - Actions › Build APK › Run workflow: builds and attaches the APK to the run (a test build).
+# - Pushing a tag vX.Y.Z (versionName must be X.Y.Z): builds the signed release APK with CarPlay,
+#   runs scripts/release.sh's checks on it and publishes the GitHub release with the APK and its
+#   .sha256. Notes: the "## [X.Y.Z]" section of CHANGELOG.md, then scripts/release-notes-footer.md.
+#     git tag -a v1.0.14 -m "CarLink 1.0.14" && git push origin v1.0.14
+#
+# Secrets (Settings › Secrets and variables › Actions); a tag build fails without them:
 #   CARLINK_MFI_TGZ_B64        base64 of `tar czf - -C ~/.carlink-private offline-mfi`
 #   ANDROID_KEYSTORE_B64       base64 of the release keystore file
 #   ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
@@ -11,14 +14,18 @@ name: Build APK
 
 on:
   workflow_dispatch:
+  push:
+    tags: ['v*']
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') && '1' || '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -28,6 +35,17 @@ jobs:
           java-version: 25
 
       - uses: gradle/actions/setup-gradle@v4
+
+      - name: Check the tag against the app's version
+        if: env.RELEASE == '1'
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          [[ "$VERSION" =~ ^[0-9]{1,4}\.[0-9]{1,2}\.[0-9]{1,2}$ ]] || { echo "::error::tag must be vX.Y.Z"; exit 1; }
+          GRADLE_VERSION="$(sed -n 's/^[[:space:]]*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n1)"
+          [ "$GRADLE_VERSION" = "$VERSION" ] || { echo "::error::app/build.gradle.kts has versionName $GRADLE_VERSION, not $VERSION"; exit 1; }
+          awk -v v="$VERSION" '$0 ~ "^## \\[" v "\\]" {on=1; next} on && /^## / {exit} on {print}' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          [ -s "$RUNNER_TEMP/notes.md" ] || { echo "::error::CHANGELOG.md has no '## [$VERSION]' section"; exit 1; }
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Restore the CarPlay authentication files
         env:
@@ -54,6 +72,9 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          if [ "$RELEASE" = 1 ] && { [ -z "${SIGNED:-}" ] || [ -z "${DIPLAY_AUTH_ASSETS_DIR:-}" ]; }; then
+            echo "::error::a release needs the signing key and CarPlay secrets"; exit 1
+          fi
           if [ "${SIGNED:-}" = 1 ]; then
             ./gradlew --no-daemon :app:assembleRelease
           else
@@ -62,6 +83,50 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: CarLink-${{ github.sha }}
+          name: CarLink-${{ github.ref_name }}-${{ github.sha }}
           path: app/build/outputs/apk/**/*.apk
           retention-days: 14
+
+      # The same checks as scripts/release.sh step 6.
+      - name: Check the release APK
+        if: env.RELEASE == '1'
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          BT="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n1)"
+          PIN="$(sed -n 's/.*const val CERT_SHA256 = "\([0-9A-Fa-f:]*\)".*/\1/p' app/src/main/java/com/carlink/app/update/UpdateVerifier.kt)"
+          PIN_NORM="$(echo "$PIN" | tr -d ':' | tr 'A-F' 'a-f')"
+          DIGESTS="$("${BT}apksigner" verify --print-certs "$APK" | sed -nE 's/^(Signer #[0-9]+|V[0-9.]+ Signer:) certificate SHA-256 digest: //p' | tr -d ': ' | tr 'A-F' 'a-f' | sort -u)"
+          [ "$DIGESTS" = "$PIN_NORM" ] || { echo "::error::APK signed with $DIGESTS, not the pinned key $PIN_NORM"; exit 1; }
+          LISTING="$(unzip -l "$APK")"
+          if grep -qiE ' assets/(release/|[^ ]*\.(jks|keystore|p12)$|[^ ]*signing\.env$)' <<<"$LISTING"; then
+            echo "::error::the APK contains signing material"; exit 1
+          fi
+          grep -q ' assets/offline-mfi/' <<<"$LISTING" || { echo "::error::no assets/offline-mfi/ in the APK"; exit 1; }
+          BADGING="$("${BT}aapt2" dump badging "$APK")"
+          grep -q '^application-debuggable' <<<"$BADGING" && { echo "::error::the APK is debuggable"; exit 1; }
+          IFS=. read -r MA MI PA <<<"$VERSION"
+          CODE=$((10#$MA * 10000 + 10#$MI * 100 + 10#$PA))
+          grep '^package:' <<<"$BADGING" | grep -q "versionCode='$CODE' .*versionName='$VERSION'" \
+            || { echo "::error::unexpected $(grep '^package:' <<<"$BADGING")"; exit 1; }
+          mkdir -p dist
+          cp "$APK" "dist/CarLink-$VERSION.apk"
+          (cd dist && sha256sum "CarLink-$VERSION.apk" > "CarLink-$VERSION.apk.sha256")
+          echo "PIN=$PIN" >> "$GITHUB_ENV"
+
+      - name: Publish the release
+        if: env.RELEASE == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK_NAME="CarLink-$VERSION.apk"
+          SIZE="$(du -h "dist/$APK_NAME" | cut -f1 | sed 's/\([KMG]\)$/ \1B/')"
+          {
+            cat "$RUNNER_TEMP/notes.md"
+            printf '\n<!-- more -->\n\n'
+            sed -e "s|{{TAG}}|$GITHUB_REF_NAME|g" -e "s|{{APK}}|$APK_NAME|g" -e "s|{{SIZE}}|$SIZE|g" \
+                -e "s|{{SHA256}}|$(cut -d' ' -f1 "dist/$APK_NAME.sha256")|g" \
+                -e "s|{{CERT}}|$PIN|g" scripts/release-notes-footer.md
+          } > "$RUNNER_TEMP/page.md"
+          grep -q '{{' "$RUNNER_TEMP/page.md" && { echo "::error::unfilled placeholder in the release page"; exit 1; }
+          gh release create "$GITHUB_REF_NAME" "dist/$APK_NAME" "dist/$APK_NAME.sha256" \
+            --verify-tag --title "CarLink $VERSION" --notes-file "$RUNNER_TEMP/page.md" --latest
