@@ -4,6 +4,12 @@ CarLink's releases, newest first. Versions follow `major.minor.patch`; each one 
 [GitHub](https://github.com/pphan93/CarLink/releases) with its APK. The text under each version
 is what the in-app update popup shows.
 
+## [1.0.16] - 2026-11-08
+
+- Fixed: an iPhone that had once been started as Android Auto was still treated as an Android
+  phone after 1.0.15, because Android Auto's own auto-start list kept naming it. That list no
+  longer decides a phone's type: such an iPhone is asked about once ("iPhone or Android?").
+
 ## [1.0.15] - 2026-11-08
 
 - Fixed: an iPhone with a custom name could still be started as Android Auto on head units whose
