@@ -175,7 +175,7 @@ class DeviceEnvironment(
         private const val TAG = "CarLink-Session"
         private const val KEY_LAST_PHONE = "address"
         /** How long the hotspot may take to report on after the start command. */
-        private const val HOTSPOT_ON_WAIT_MILLIS = 8_000L
+        private const val HOTSPOT_ON_WAIT_MILLIS = 20_000L
         /**
          * Android-Bluetooth problems that do not apply when the stereo's module carries Bluetooth.
          * No iPhone chosen too: the iPhone pairs with the module, which names it to the engine (#32).

@@ -126,7 +126,9 @@ object SystemWifi {
         val command = startSoftApCommand(details)
         val viaAdb = runCatching {
             LocalAdb(AdbKeys.load(context)).use { adb ->
-                adb.connect(mayAsk = false) == LocalAdb.Access.READY && adb.shell(command) != null
+                // start-softap waits for the AP and can outlast the 5 s default read; a timeout still
+                // means the command ran, so the caller's hotspot poll decides, not the shell's output.
+                (adb.connect(mayAsk = false) == LocalAdb.Access.READY).also { if (it) adb.shell(command, 20_000) }
             }
         }.getOrDefault(false)
         log("hotspot start through local ADB: ${if (viaAdb) "sent" else "not available"}")

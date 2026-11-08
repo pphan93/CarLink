@@ -4,6 +4,12 @@ CarLink's releases, newest first. Versions follow `major.minor.patch`; each one 
 [GitHub](https://github.com/pphan93/CarLink/releases) with its APK. The text under each version
 is what the in-app update popup shows.
 
+## [1.0.18] - 2026-11-08
+
+- Fixed: after CarLink switched the car hotspot on, it did not notice and stayed on "hotspot is
+  off" until you opened the hotspot settings and came back. It now waits for the hotspot to come up
+  and connects.
+
 ## [1.0.17] - 2026-11-08
 
 - On stereos with their own Bluetooth module, choosing "Stereo's Bluetooth module" on Home now
