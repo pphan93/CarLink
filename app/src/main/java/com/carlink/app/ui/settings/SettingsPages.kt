@@ -101,6 +101,13 @@ private fun ConnectionEssentials(ui: SettingsUi, actions: SettingsActions, openS
                 { openSheet(SheetKey.of(EssentialSheet.SAME_WIFI)) },
                 description = stringResource(R.string.carlink_settings_same_wifi_detail), icon = R.drawable.carlink_ic_wifi)
         }
+        // Only where the probe found an external Bluetooth module: keep it across restarts (Home's chooser).
+        if (ui.stereoBluetoothExternal) {
+            GroupDivider()
+            SwitchRow(stringResource(R.string.carlink_settings_use_stereo_bt), c.useStereoBluetooth && !c.useAndroidBluetooth,
+                actions::setUseStereoBluetooth,
+                description = stringResource(R.string.carlink_settings_use_stereo_bt_detail), icon = R.drawable.carlink_ic_bluetooth)
+        }
         // Advanced, and only where the probe found an external Bluetooth module.
         if (ui.unified.showAdvanced && ui.stereoBluetoothExternal) {
             GroupDivider()

@@ -71,6 +71,8 @@ interface SettingsActions {
     fun setFloatingSwitcher(on: Boolean) {}
     /** "Wireless through the stereo's Bluetooth module (experimental)" (CarLinkPreferences.wirelessOnExternalBluetooth). */
     fun setWirelessOnExternalBluetooth(on: Boolean) {}
+    /** "Always use the stereo's Bluetooth module" (CarLinkPreferences.useStereoBluetooth; Home's chooser). */
+    fun setUseStereoBluetooth(on: Boolean) {}
     /** Root mode (CarLinkPreferences.rootMode). */
     fun setRootMode(on: Boolean) {}
     /** "Android Auto on this screen (experimental)" (CarLinkPreferences.androidAutoOnScreen). */

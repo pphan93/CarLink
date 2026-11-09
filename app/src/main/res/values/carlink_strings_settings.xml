@@ -50,6 +50,8 @@
     <string name="carlink_settings_root_unavailable">Root is not available or was refused, so Root mode stays off.</string>
     <string name="carlink_settings_external_bt">Wireless through the stereo\'s Bluetooth module (experimental)</string>
     <string name="carlink_settings_external_bt_detail">This stereo\'s Bluetooth is a separate module. Wireless Android Auto and CarPlay reach your phone through it; on by default. Turn off if wireless misbehaves on this stereo; USB still works. Applies from the next connection.</string>
+    <string name="carlink_settings_use_stereo_bt">Always use the stereo\'s Bluetooth</string>
+    <string name="carlink_settings_use_stereo_bt_detail">Wireless CarPlay and Android Auto always reach your phone through the stereo\'s Bluetooth module, even when your phone is also paired with this screen. Off: CarLink decides. Applies from the next connection.</string>
     <string name="carlink_settings_external_bt_fyt_note">First disable the stereo\'s own “Car Link” app (com.syu.carlink) in Android Settings › Apps.</string>
     <string name="carlink_settings_method">Connection method</string>
     <string name="carlink_settings_method_detail">How the phone and the car share Wi-Fi</string>

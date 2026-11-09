@@ -119,6 +119,7 @@ fun SettingsScreen(vm: CarLinkViewModel, onBack: () -> Unit, navigate: (Route) -
             override fun setStartOnBoot(on: Boolean) = vm.setStartOnBoot(on)
             override fun setFloatingSwitcher(on: Boolean) = vm.setFloatingSwitcher(on)
             override fun setWirelessOnExternalBluetooth(on: Boolean) = vm.setWirelessOnExternalBluetooth(on)
+            override fun setUseStereoBluetooth(on: Boolean) = vm.setUseAndroidBluetooth(!on)
             override fun setRootMode(on: Boolean) = vm.setRootMode(on)
             override fun setAndroidAutoOnScreen(on: Boolean) = vm.setAndroidAutoOnScreen(on)
             override fun openOverlayPermission() = vm.fix(com.carlink.core.core.LinkProblem.OVERLAY)
@@ -161,9 +162,9 @@ fun SettingsScreen(vm: CarLinkViewModel, onBack: () -> Unit, navigate: (Route) -
         overlayAllowed = overlayAllowed,
         carBrand = vehicle.brand,
         detectedBrand = vehicle.detected,
-        stereoBluetoothExternal = stereoBluetooth?.let {
-            com.carlink.core.connection.DeviceEnvironment.effective(connection.useAndroidBluetooth, connection.useStereoBluetooth, it)
-        }?.blocksWireless == true,
+        // The module's own markers: the rows stay offered where a phone bonded to Android made the
+        // probe call the module a likely false positive.
+        stereoBluetoothExternal = stereoBluetooth?.moduleOnly?.blocksWireless == true,
         stereoBluetoothFyt = stereoBluetooth?.classification == com.carlink.core.detect.StereoBluetooth.FYT_MODULE,
         liveEngine = link.engine?.takeIf { link.stage == com.carlink.core.core.LinkStage.CONNECTED }
             ?.let { com.carlink.app.ui.components.engineName(it) },

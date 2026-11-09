@@ -4,6 +4,12 @@ CarLink's releases, newest first. Versions follow `major.minor.patch`; each one 
 [GitHub](https://github.com/pphan93/CarLink/releases) with its APK. The text under each version
 is what the in-app update popup shows.
 
+## [1.0.19] - 2026-11-08
+
+- New: Settings › Connection › "Always use the stereo's Bluetooth". On stereos with their own
+  Bluetooth module, wireless CarPlay and Android Auto then always go through the module, even
+  right after the stereo starts and when your phone is also paired with the screen.
+
 ## [1.0.18] - 2026-11-08
 
 - Fixed: after CarLink switched the car hotspot on, it did not notice and stayed on "hotspot is

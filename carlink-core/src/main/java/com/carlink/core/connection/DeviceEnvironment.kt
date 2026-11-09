@@ -211,11 +211,15 @@ class DeviceEnvironment(
         fun moduleEnabled(stereo: StereoBluetooth, moduleOn: Boolean): Boolean =
             moduleOn || stereo == StereoBluetooth.ZLINK_DAEMON
 
-        /** This stereo's module carries Bluetooth for at least one engine (probe finished; [moduleEnabled]). */
+        /**
+         * This stereo's module carries Bluetooth for at least one engine ([moduleEnabled]). Before the
+         * full probe finishes, the quick one decides: a start right after boot otherwise went out over
+         * Android's Bluetooth although the driver chose the module.
+         */
         fun moduleCarriesBluetooth(context: Context): Boolean =
-            ExternalBluetoothProbe.cached()?.let { effective(context, it) }?.let { stereo ->
+            effectiveStereo(context).let { stereo ->
                 stereo.blocksWireless && moduleEnabled(stereo, CarLinkPreferences(context).wirelessOnExternalBluetooth)
-            } == true
+            }
 
         /**
          * Whether CarLink blocks wireless [engine] on a stereo classified [stereo]; [moduleOn] is the
