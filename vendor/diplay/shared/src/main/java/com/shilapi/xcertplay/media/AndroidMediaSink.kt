@@ -834,6 +834,20 @@ internal data class DecoderAttempt(
  * first on its own, so a decoder that refuses it keeps the tuned format it gets without one. A
  * [lowLatencyDecoder] gets its tuned attempts before the default decoder's.
  */
+/** CarLink: #26, hardware H.264 decoders that configure without error but output green frames (Huawei P20 Lite). */
+internal fun greenOnlyAvcDecoder(codecName: String): Boolean = codecName.startsWith("OMX.IMG.MSVDX", ignoreCase = true)
+
+/**
+ * CarLink: the input buffer a decoder is asked for, DiAuto's `CodecInputSizePolicy` (ExoPlayer's rule):
+ * the picture in whole macroblocks, 4:2:0, over the minimum compression ratio 2; 256 KB to 8 MB.
+ * 1280x720 gives 675 KB instead of 8 MB per buffer.
+ */
+internal fun videoInputSize(width: Int, height: Int): Int {
+    val w = (width + 15) / 16 * 16L
+    val h = (height + 15) / 16 * 16L
+    return (w * h * 3 / 2 / 2).coerceIn(256L * 1024, 8L * 1024 * 1024).toInt()
+}
+
 internal fun videoDecoderAttempts(
     operatingRate: Int,
     softwareDecoder: String?,
@@ -1216,12 +1230,13 @@ private class VideoDecoder(
             MtkDecoderTuning.legacyAcodecDecoderName(mime) != null) maximumMtkMode else MtkDecoderMode.NONE
         var configured: ConfiguredVideoDecoder? = null
         var used: DecoderAttempt? = null
-        for (attempt in videoDecoderAttempts(
+        val softwareDecoder = softwareDecoderName(mime)
+        for (attempt in softwareFirstForGreenDecoder(mime, softwareDecoder, videoDecoderAttempts( // CarLink: #26
             requestedRate,
-            softwareDecoderName(mime),
+            softwareDecoder,
             requestedLowLatency,
             requestedMtkMode,
-        )) {
+        ))) {
             configured = tryConfigure(mime, csd, surface, attempt, atOnce)
             if (configured != null) { used = attempt; break }
         }
@@ -1299,7 +1314,8 @@ private class VideoDecoder(
     ): MediaFormat =
         MediaFormat.createVideoFormat(mime, width, height).apply {
             if (attempt.tuned) {
-                setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, MAX_INPUT_SIZE)
+                // CarLink: sized from the picture, not 8 MB for every decoder (each port allocates several).
+                setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, if (inputSizeOverflowed) MAX_INPUT_SIZE else videoInputSize(width, height))
                 setInteger(MediaFormat.KEY_PRIORITY, 0)
                 if (attempt.operatingRate > 0) setInteger(MediaFormat.KEY_OPERATING_RATE, attempt.operatingRate)
             }
@@ -1397,10 +1413,23 @@ private class VideoDecoder(
             runCatching { PICTURE_ORDER_PARAMETER in codec.supportedVendorParameters }.getOrDefault(false)
 
     private fun softwareDecoderName(mime: String): String? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        // CarLink: #26, before Android 10 there is no isSoftwareOnly; Android's own decoders are OMX.google.*.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
+            .firstOrNull { !it.isEncoder && it.name.startsWith("OMX.google.") && mime in it.supportedTypes }?.name
         return MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.firstOrNull {
             !it.isEncoder && it.isSoftwareOnly && mime in it.supportedTypes
         }?.name
+    }
+
+    // CarLink: #26, a decoder that configures fine but draws only green goes after Android's software one.
+    private fun softwareFirstForGreenDecoder(mime: String, software: String?, attempts: List<DecoderAttempt>): List<DecoderAttempt> {
+        if (software == null || mime != MediaFormat.MIMETYPE_VIDEO_AVC) return attempts
+        val default = runCatching {
+            MediaCodecList(MediaCodecList.REGULAR_CODECS).findDecoderForFormat(MediaFormat.createVideoFormat(mime, width, height))
+        }.getOrNull() ?: return attempts
+        if (!greenOnlyAvcDecoder(default)) return attempts
+        report("decoder $default draws only green on this device; using $software")
+        return listOf(DecoderAttempt(software, tuned = false)) + attempts.filterNot { it.codecName == software }
     }
 
     private fun createDecoder(mime: String): MediaCodec {
@@ -1554,11 +1583,15 @@ private class VideoDecoder(
             codec.queueInputBuffer(index, 0, annexB.size, presentationUs, 0)
             referenceChain.onQueued()
         } else {
+            inputSizeOverflowed = true // CarLink: the recreated decoder asks for the full 8 MB from now on
             recover("video frame exceeded codec input capacity")
             return
         }
         if (outputThread == null) drainOutput(codec)
     }
+
+    /** CarLink: a frame did not fit the picture-sized input buffer; this sink asks for [MAX_INPUT_SIZE] again. */
+    @Volatile private var inputSizeOverflowed = false
 
     private fun recover(reason: String) {
         Log.w(TAG, "Video recovery: $reason; waiting for keyframe")

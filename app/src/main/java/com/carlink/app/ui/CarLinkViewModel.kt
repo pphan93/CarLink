@@ -16,7 +16,6 @@ import com.carlink.core.detect.BluetoothAvailability
 import com.carlink.core.detect.PairedPhone
 import com.carlink.core.detect.PhonesRepository
 import com.carlink.core.connection.Connection
-import com.carlink.core.connection.DevicePreflight
 import com.carlink.core.connection.SessionState
 import com.carlink.core.connection.WirelessPolicy
 import com.carlink.core.connection.toLinkState
@@ -158,8 +157,10 @@ class CarLinkViewModel(application: Application) : AndroidViewModel(application)
     fun carBrandName(): String? = vehicle.value.let { it.brand ?: it.detected }?.displayName
 
     /** The phone's model and OS version from the engines' logs, kept for later issue reports. */
-    private fun rememberPhone(request: com.carlink.core.connection.SessionRequest) = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-        kotlinx.coroutines.delay(5_000) // the engines' files are written a moment after the picture
+    private fun rememberPhone(request: com.carlink.core.connection.SessionRequest) = kotlin.concurrent.thread(name = "carlink-remember-phone") {
+        // A full log parse: background priority, so it never competes with the first frames' decode.
+        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+        Thread.sleep(5_000) // the engines' files are written a moment after the picture
         runCatching {
             val log = com.carlink.app.diagnostics.ConnectionLog.read(app)
             val start = com.carlink.app.diagnostics.GitHubIssueReport.lastStart(log, request.engine) ?: return@runCatching
@@ -491,7 +492,8 @@ class CarLinkViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /** Runtime permissions CarLink asks for in one go (Bluetooth, Wi-Fi, location, microphone, notifications). */
-    fun missingPermissions(): List<String> = DevicePreflight.requiredPermissions()
+    // The setup's list: it adds the CarPlay host's own, e.g. Local network on Android 17 (#38).
+    fun missingPermissions(): List<String> = com.carlink.app.ui.setup.SetupPermissions.runtimePermissions()
         .filter { app.checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED }
 
     /**
@@ -581,6 +583,7 @@ class CarLinkViewModel(application: Application) : AndroidViewModel(application)
         phonesRepository.refresh()
         com.carlink.core.diagnostics.EventLog.add("CarLink", "Bluetooth: ${if (on) "this screen's own" else "the stereo's module"}")
     }
+
     /** Root mode: turning it on asks the root manager once and grants everything setup asks for. */
     fun setRootMode(on: Boolean) {
         preferences.rootMode = on

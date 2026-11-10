@@ -90,6 +90,16 @@ object HostIntegration {
     @JvmStatic
     var claimHiddenBottomStrip: Boolean = true
 
+    /**
+     * CarLink: the screen turns (a phone or tablet). With Automatic resolution the engine then asks
+     * for one landscape stream holding the screen's shape in either orientation, and a turn moves
+     * Android Auto by margins (UpdateUiConfigRequest) instead of reconnecting
+     * ([com.andrerinas.openheadunit.utils.HeadUnitScreenConfig.turning]).
+     */
+    @Volatile
+    @JvmStatic
+    var turningScreen: Boolean = false
+
     /** CarLink: what [onEngineEvent] reports. Detail strings are `key=value` pairs joined by `;`. */
     enum class EngineEvent {
         /** The Wi-Fi radio is off, so the Wi-Fi Direct route cannot start (API 29+ cannot turn it on). */
@@ -137,6 +147,8 @@ object HostIntegration {
          * agreed to send (agreed once per session). Detail: `picture=WxH;screen=landscape|portrait`.
          */
         ORIENTATION_CHANGED,
+        /** CarLink: this unit could not create its Wi-Fi Direct group at all (#40). Detail: `reason=`. */
+        WIFI_DIRECT_GROUP_FAILED,
     }
 
     /**
