@@ -4,6 +4,26 @@ CarLink's releases, newest first. Versions follow `major.minor.patch`; each one 
 [GitHub](https://github.com/pphan93/CarLink/releases) with its APK. The text under each version
 is what the in-app update popup shows.
 
+## [1.0.20] - 2026-11-10
+
+- New: on a phone or tablet used as the screen, CarPlay and Android Auto turn with the screen
+  without dropping to Home or reconnecting, and Android Auto is laid out like a car display
+  instead of a phone with oversized icons.
+- Fixed: CarPlay could lag behind touches on fast screens; it now runs at 60 fps where the
+  hardware carries it.
+- Fixed: on Android 17, Home kept saying "Permissions needed" for wireless CarPlay because the
+  new Local network permission was never asked for; wireless Android Auto asks for it too.
+- Faster and lighter on low-end head units (1.5 GB of memory or less): less video memory,
+  smaller buffers, a slightly faster start, CarPlay capped at 1280x720.
+- New: CarLink runs on Intel (x86) head units such as FYT/SYU SC9853i stereos.
+- Fixed: when this screen cannot set up Wi-Fi Direct, Android Auto says so and tries the next
+  connection instead of "your phone didn't answer".
+- Fixed: a green CarPlay screen on phones such as the Huawei P20 Lite.
+- Fixed: CarLink closed with an error when the phone disconnected on some Android 15 tablets,
+  and could crash on Android 8 when a CarPlay connection ended right as it started.
+- Fixed, from DiPlay: wired CarPlay stalls, a silent call microphone, a lost picture after split
+  screen, music at the car's own sample rate, and safer handling of bad data from the phone.
+
 ## [1.0.19] - 2026-11-08
 
 - New: Settings › Connection › "Always use the stereo's Bluetooth". On stereos with their own
