@@ -4,6 +4,13 @@ CarLink's releases, newest first. Versions follow `major.minor.patch`; each one 
 [GitHub](https://github.com/pphan93/CarLink/releases) with its APK. The text under each version
 is what the in-app update popup shows.
 
+## [1.0.21] - 2026-11-10
+
+- Fixed: on stereos with their own Bluetooth module, wireless CarPlay could refuse to start after
+  the car was turned on ("wireless is not available on this stereo") until CarLink was reopened.
+- Faster wireless CarPlay start when only iPhones are known: CarLink no longer keeps Android Auto
+  running in the background for them, which held each start back by up to 5 s.
+
 ## [1.0.20] - 2026-11-10
 
 - New: on a phone or tablet used as the screen, CarPlay and Android Auto turn with the screen
