@@ -318,6 +318,9 @@ class SessionManager(
                     if (projecting) {
                         note("kept a running ${adapter.engine} session after a restart of this process")
                         stopping--; drainAfterStop()
+                    } else if (!adapter.hasSession()) {
+                        // Only the engine's process was alive (e.g. prewarmed): nothing to stop.
+                        stopping--; drainAfterStop()
                     } else {
                         note("stopping an orphaned ${adapter.engine} session")
                         adapter.stop { stopping--; drainAfterStop() }
