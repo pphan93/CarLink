@@ -24,7 +24,6 @@ object HeadUnitScreenConfig {
     private var turnRegionW: Int = 0
     private var turnRegionH: Int = 0
     private var turnScale: Float = 1.0f
-    private var turnSizeFactorUsed: Float = 1.0f
     
     // Flag to determine if the projection should stretch and ignore aspect ratio
     private var stretchToFill: Boolean = false 
@@ -126,8 +125,7 @@ object HeadUnitScreenConfig {
 
         // Only update if dimensions or settings changed
         val currentHash = computeSettingsHash(settings)
-        if (isInitialized && realScreenWidthPx == finalRealW && realScreenHeightPx == finalRealH && lastSettingsHash == currentHash &&
-            turnSizeFactorUsed == com.andrerinas.openheadunit.HostIntegration.turnSizeFactor) { // CarLink: a live size change recalculates
+        if (isInitialized && realScreenWidthPx == finalRealW && realScreenHeightPx == finalRealH && lastSettingsHash == currentHash) {
             return
         }
 
@@ -280,25 +278,15 @@ object HeadUnitScreenConfig {
         // CarLink: a turning screen keeps one landscape stream; only the region inside it turns.
         if (turning()) {
             if (!isResolutionLocked) {
-                // CarLink: 1440p (HEVC only, as the Automatic branch below) where the panel is that large:
-                // the region is upscaled to the screen, and at 1080p it was soft (2.4x on a 2560x1600 tablet).
-                // CarLink: or where the host found the HEVC decoder carries 1440p60 (turningHighResStream):
-                // the region shown is smaller than the stream, so the panel ceiling does not apply to it.
-                val hostHighRes = com.andrerinas.openheadunit.HostIntegration.turningHighResStream
-                negotiatedResolutionType = if (autoHevcHighResolution && Build.VERSION.SDK_INT >= 24 &&
-                    (maxOf(realScreenWidthPx, realScreenHeightPx) >= 2560 || hostHighRes)) {
-                    Control.Service.MediaSinkService.VideoConfiguration.VideoCodecResolutionType._2560x1440
-                } else Control.Service.MediaSinkService.VideoConfiguration.VideoCodecResolutionType._1920x1080
+                negotiatedResolutionType = Control.Service.MediaSinkService.VideoConfiguration.VideoCodecResolutionType._1920x1080
                 val ceiling = autoResolutionForPanel(maxOf(realScreenWidthPx, realScreenHeightPx),
                     minOf(realScreenWidthPx, realScreenHeightPx), false, canNegotiateHevc)
-                if (!hostHighRes && pixelsOf(negotiatedResolutionType) > pixelsOf(ceiling)) negotiatedResolutionType = ceiling
+                if (pixelsOf(negotiatedResolutionType) > pixelsOf(ceiling)) negotiatedResolutionType = ceiling
             }
             val longSide = maxOf(screenWidthPx, screenHeightPx).toFloat()
             turnScale = minOf(getNegotiatedWidth(), getNegotiatedHeight()) / longSide
-            turnSizeFactorUsed = com.andrerinas.openheadunit.HostIntegration.turnSizeFactor
-            val sized = turnScale / turnSizeFactorUsed.coerceAtLeast(1f) // CarLink
-            turnRegionW = ((screenWidthPx * sized).roundToInt() and 1.inv()).coerceIn(2, getNegotiatedWidth())
-            turnRegionH = ((screenHeightPx * sized).roundToInt() and 1.inv()).coerceIn(2, getNegotiatedHeight())
+            turnRegionW = ((screenWidthPx * turnScale).roundToInt() and 1.inv()).coerceIn(2, getNegotiatedWidth())
+            turnRegionH = ((screenHeightPx * turnScale).roundToInt() and 1.inv()).coerceIn(2, getNegotiatedHeight())
             isSmallScreen = true
             scaleFactor = 1.0f
             AppLog.i("[UI_DEBUG] CarScreen turning: usable ${screenWidthPx}x${screenHeightPx}, stream $negotiatedResolutionType, " +

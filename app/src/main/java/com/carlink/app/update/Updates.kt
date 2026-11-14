@@ -33,16 +33,15 @@ object Updates {
         val current = AppVersion.parseVersionName(BuildConfig.VERSION_NAME) ?: AppVersion(0, 0, 0)
         val http = UrlConnectionHttp("CarLink/${BuildConfig.VERSION_NAME} (Android)")
         val supported = isSupported(app)
-        val prefs = UiPreferences(app)
         Log.i(TAG, "updater: version $current, ${if (supported) "updates on" else "updates off (not the signed release build)"}")
         return UpdateController(
             scope = MainScope(),
             io = Dispatchers.IO,
-            source = GitHubReleaseSource(http, current) { prefs.testVersions },
+            source = GitHubReleaseSource(http, current),
             http = http,
             verifier = UpdateVerifier(JavaSha256, AndroidApkInspector(app), app.packageName, BuildConfig.VERSION_CODE.toLong()),
             installer = PackageInstallerUpdater(app),
-            prefs = prefs,
+            prefs = UiPreferences(app),
             current = current,
             supported = supported,
             downloadDir = File(app.cacheDir, "updates"),

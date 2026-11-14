@@ -78,8 +78,6 @@ sealed interface SessionState {
         val path: WirelessPath?,
         val reason: FailureReason,
         val detail: String?,
-        /** The step the attempt was on when it failed (Home names it); null when it never started. */
-        val stage: ProgressStage? = null,
     ) : SessionState
 
     sealed interface Phase {
@@ -597,9 +595,6 @@ class SessionManager(
      * The driver changed a setting (a Wi-Fi password, the connection type): a blocked request
      * checks again at once, so the fix shows without a Try again.
      */
-    /** "Forget and re-pair": the phone's connection record goes, so no stale path ranking survives. */
-    fun forgetPhone(phoneAddress: String) = profiles.forget(phoneAddress)
-
     fun onSettingsChanged() {
         if (_state.value !is SessionState.Blocked) return
         note("settings changed; checking the blocked request again")
@@ -786,8 +781,7 @@ class SessionManager(
             }
             is AdapterEvent.Restart -> {
                 note("${plan.engine} restarting on ${plan.path ?: "USB"}: ${event.detail}")
-                // The session ran, so its Wi-Fi Direct group works: the restart reads it instead of making one.
-                replaceAttempt(a, a.index, SessionState.Phase.Starting, notice = null, networkSuspect = false)
+                replaceAttempt(a, a.index, SessionState.Phase.Starting, notice = null)
             }
             is AdapterEvent.Ended -> {
                 note("${plan.engine} session ended${if (event.byUser) " by the driver" else ""}")
@@ -959,8 +953,7 @@ class SessionManager(
                 val (reason, _) = StallPlaybook.failure(plan.engine, plan.transport, stage, waited)
                 val index = if (action == RecoveryAction.NEXT_PATH) a.index + 1 else a.index
                 replaceAttempt(a, index, SessionState.Phase.Retrying(index + 1, reason, a.stage, message),
-                    Notice(Notice.Kind.RECOVERING, stage, message, action),
-                    networkSuspect = action != RecoveryAction.RETRY_STEP || !StallPlaybook.beforeNetwork(stage))
+                    Notice(Notice.Kind.RECOVERING, stage, message, action))
             }
             RecoveryAction.ASK_REPLUG -> {
                 profiles.recordFailure(request, plan.path, kind, stage, message)
@@ -975,15 +968,12 @@ class SessionManager(
     }
 
     /** Stops [a]'s engine and starts path [index] (the same one, or the next) once it has stopped. */
-    private fun replaceAttempt(a: Attempt, index: Int, phase: SessionState.Phase, notice: Notice?, networkSuspect: Boolean = true) {
+    private fun replaceAttempt(a: Attempt, index: Int, phase: SessionState.Phase, notice: Notice?) {
         endAttempt()
         val current = _state.value as? SessionState.Active ?: return
         _state.value = current.copy(phase = phase, notice = notice)
         running = null
-        // The same Wi-Fi Direct attempt again, with the network not in doubt: Android Auto keeps its
-        // group (open-headunit NativeGroupKeepPolicy), so the phone rejoins the network it just used.
-        stopEngine(a.plan.engine, keepWirelessNetwork = index == a.index && !networkSuspect &&
-            a.plan.path == WirelessPath.WIFI_DIRECT)
+        stopEngine(a.plan.engine)
         begin(a.request, a.paths, index, token, phase, notice)
     }
 
@@ -997,7 +987,7 @@ class SessionManager(
         running = null
         environment.onEngaged(null)
         stopEngine(a.plan.engine)
-        _state.value = SessionState.Failed(a.request, a.plan.path, reason, detail, a.stage)
+        _state.value = SessionState.Failed(a.request, a.plan.path, reason, detail)
     }
 
     private fun endAttempt() {
@@ -1007,10 +997,10 @@ class SessionManager(
 
     // --- Engine stops --------------------------------------------------------------------------
 
-    private fun stopEngine(engine: Engine, keepWirelessNetwork: Boolean = false) {
+    private fun stopEngine(engine: Engine) {
         stopping++
         val started = clock()
-        adapters.getValue(engine).stop(keepWirelessNetwork) {
+        adapters.getValue(engine).stop {
             main.post {
                 stopping--
                 note("$engine stopped in ${clock() - started} ms")

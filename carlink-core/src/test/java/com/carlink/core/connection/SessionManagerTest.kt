@@ -11,7 +11,6 @@ import com.carlink.core.core.PhoneKind
 import com.carlink.core.core.Transport
 import com.carlink.core.settings.WirelessPath
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -53,10 +52,8 @@ class SessionManagerTest {
             session = true
         }
 
-        override fun stop(onStopped: () -> Unit) = stop(false, onStopped)
-
-        override fun stop(keepWirelessNetwork: Boolean, onStopped: () -> Unit) {
-            log += "$engine stop" + if (keepWirelessNetwork) " keep" else ""
+        override fun stop(onStopped: () -> Unit) {
+            log += "$engine stop"
             if (stopsAtOnce) { session = false; onStopped() } else pendingStops += { session = false; onStopped() }
         }
 
@@ -245,7 +242,6 @@ class SessionManagerTest {
         carPlay.emit(AdapterEvent.Failed(FailureReason.BLUETOOTH)); idle()
         assertEquals(1, starts.size)
         assertEquals(FailureReason.BLUETOOTH, (m.state.value as SessionState.Failed).reason)
-        assertEquals("Home names the step it failed on", ProgressStage.WAITING_FOR_PHONE, (m.state.value as SessionState.Failed).stage)
     }
 
     @Test fun theNextSessionStartsOnlyAfterTheEngineFinishedStopping() {
@@ -887,21 +883,6 @@ class SessionManagerTest {
         assertEquals(listOf("ANDROID_AUTO start WIRELESS WIFI_DIRECT", "ANDROID_AUTO start WIRELESS WIFI_DIRECT"), starts)
         assertEquals(SessionState.Phase.Starting, (m.state.value as SessionState.Active).phase)
         assertEquals(false, env.autoConnectPaused)
-        assertTrue("the working Wi-Fi Direct group is kept for the restart", "ANDROID_AUTO stop keep" in log)
-    }
-
-    @Test fun onlyABluetoothStageRetryKeepsTheGroupAWifiStageOneGetsAFreshGroup() {
-        fun firstStopAfterStall(stage: ProgressStage): String {
-            log.clear()
-            val m = manager()
-            m.connect("AA:BB", PhoneKind.ANDROID, "Pixel"); idle()
-            androidAuto.emit(AdapterEvent.Progress(2, 4, stage)); idle()
-            repeat(120) { if (log.none { it.startsWith("ANDROID_AUTO stop") }) advance(1_000) }
-            m.stop(); idle()
-            return log.first { it.startsWith("ANDROID_AUTO stop") }
-        }
-        assertEquals("a Bluetooth handshake retry keeps the group", "ANDROID_AUTO stop keep", firstStopAfterStall(ProgressStage.HANDSHAKE))
-        assertEquals("a Wi-Fi stage retry gets a fresh group", "ANDROID_AUTO stop", firstStopAfterStall(ProgressStage.JOINING_WIFI))
     }
 
     @Test fun aWirelessPhoneThatLeftReturnsHome() {

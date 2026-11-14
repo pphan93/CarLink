@@ -4,6 +4,12 @@ CarLink's releases, newest first. Versions follow `major.minor.patch`; each one 
 [GitHub](https://github.com/pphan93/CarLink/releases) with its APK. The text under each version
 is what the in-app update popup shows.
 
+## [1.0.23] - 2026-11-14
+
+- Removed the upstream CarLink 1.0.16 additions that came with 1.0.22 (live interface size,
+  Screen type, new Sound settings, switcher quick toggles, settings backup and the rest). The
+  wireless Home fix from 1.0.22 stays.
+
 ## [1.0.22] - 2026-11-13
 
 - Fixed: after disconnecting a wireless CarPlay session, Home could show "Plug in your phone"

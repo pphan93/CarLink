@@ -25,19 +25,7 @@ class CarPlayViewAreas private constructor(
     data class Screen(val width: Int, val height: Int, val portrait: Boolean)
 
     /** One area's purpose; [sixths] is CarPlay's share of its screen beside the side panel, in sixths. */
-    private data class Slot(val kind: Kind, val portrait: Boolean, val sixths: Int = 6, val sizeFactor: Float = 1f) // CarLink: sizeFactor
-
-    /**
-     * CarLink: the interface-size variant of the whole screen in use: a full-screen area [sizeFactor] times
-     * smaller, scaled up to fill the window, so CarPlay's UI looks that much larger. Turns, the dock and the
-     * split screen keep it; [use] of a full-screen area sets it.
-     */
-    @Volatile var sizeFactor: Float = 1f
-        private set
-
-    /** CarLink: the screen width (mm) this session told the iPhone; the size variants are relative to it. */
-    var sessionWidthMm: Int = 0
-        private set
+    private data class Slot(val kind: Kind, val portrait: Boolean, val sixths: Int = 6)
 
     /** The area CarPlay uses now; shared by the session's host and its settings. */
     @Volatile var current: Int = initial
@@ -58,25 +46,7 @@ class CarPlayViewAreas private constructor(
     fun index(kind: Kind, dockEdge: Int?): Int? = index(kind, slots[current].portrait, dockEdge)
 
     fun index(kind: Kind, portrait: Boolean, dockEdge: Int?): Int? =
-        index(kind, portrait, dockEdge, if (kind == Kind.FULL_SCREEN) sizeFactor else 1f) // CarLink: size variant
-
-    /** CarLink: [index] of the area with interface-size [factor] (only full-screen areas have factors other than 1). */
-    private fun index(kind: Kind, portrait: Boolean, dockEdge: Int?, factor: Float): Int? =
-        areas.indices.firstOrNull {
-            slots[it].kind == kind && slots[it].portrait == portrait && areas[it].dockEdge == dockEdge &&
-                abs(slots[it].sizeFactor - factor) < SIZE_FACTOR_TOLERANCE
-        }
-
-    /**
-     * CarLink: the full-screen area that shows CarPlay as on a [widthMm] wide screen (the session's own width
-     * is its own area) on the current screen with the current dock edge, or null when CarPlay is not on the
-     * whole screen (split screen, side panel), [widthMm] is above the session's or this session declared no
-     * such area (the caller reconnects).
-     */
-    fun sizeVariant(widthMm: Int): Int? {
-        if (sessionWidthMm <= 0 || widthMm !in 1..sessionWidthMm || slots[current].kind != Kind.FULL_SCREEN) return null
-        return index(Kind.FULL_SCREEN, slots[current].portrait, areas[current].dockEdge, sessionWidthMm.toFloat() / widthMm)
-    }
+        areas.indices.firstOrNull { slots[it].kind == kind && slots[it].portrait == portrait && areas[it].dockEdge == dockEdge }
 
     /**
      * The area for DiPlay's window on a [portrait] or landscape screen, keeping the dock edge: the
@@ -107,7 +77,7 @@ class CarPlayViewAreas private constructor(
      */
     fun layoutArea(index: Int): AirPlayViewArea =
         if (slots[index].kind == Kind.SIDE_PANEL) {
-            index(Kind.FULL_SCREEN, slots[index].portrait, areas[index].dockEdge, 1f)?.let { areas[it] } ?: areas[index] // CarLink: 1f
+            index(Kind.FULL_SCREEN, slots[index].portrait, areas[index].dockEdge)?.let { areas[it] } ?: areas[index]
         } else areas[index]
 
     /**
@@ -133,15 +103,11 @@ class CarPlayViewAreas private constructor(
 
     fun use(index: Int) {
         current = index.coerceIn(0, areas.lastIndex)
-        if (slots[current].kind == Kind.FULL_SCREEN) sizeFactor = slots[current].sizeFactor // CarLink
     }
 
     companion object {
         /** Further than this (as an aspect ratio) from DiPlay's window, a split-screen area does not fit it. */
         private const val MAX_ASPECT_MISMATCH = 1.25
-
-        /** CarLink: size factors closer than this are the same interface size. */
-        private const val SIZE_FACTOR_TOLERANCE = 0.01f
 
         /** CarPlay's share of the screen beside the side panel, in sixths: two thirds, half, one third. */
         val SIDE_PANEL_SIXTHS = listOf(4, 3, 2)
@@ -158,12 +124,10 @@ class CarPlayViewAreas private constructor(
             splitWindow: Pair<Float, Float>?,
             sidePanel: Boolean = false,
             rightHandDrive: Boolean = false,
-            sizeWidthsMm: List<Int> = emptyList(), // CarLink
-            sessionWidthMm: Int = 0, // CarLink
         ): CarPlayViewAreas? =
             build(width, height, listOf(Screen(width, height, portrait = height > width)), dock,
                 splitWindow = { splitWindow }, startPortrait = height > width, sidePanel = sidePanel,
-                rightHandDrive = rightHandDrive, sizeWidthsMm = sizeWidthsMm, sessionWidthMm = sessionWidthMm)
+                rightHandDrive = rightHandDrive)
 
         /**
          * The areas for a [canvasWidth] x [canvasHeight] stream holding [screens] (each at its top-left
@@ -171,9 +135,6 @@ class CarPlayViewAreas private constructor(
          * screen). [splitWindow] gives the split-screen window on a portrait or landscape screen as
          * fractions of that full screen, or null without split-screen support. With [sidePanel], CarPlay
          * also gets two thirds of each screen beside a DiPlay panel, nearer the driver ([rightHandDrive]).
-         * CarLink: each full screen is also declared once per width in [sizeWidthsMm] below [sessionWidthMm]
-         * (the width told to the iPhone), smaller by their ratio at its top-left corner, for live interface-size
-         * changes ([sizeVariant]). They never make a plain canvas declare areas.
          */
         fun build(
             canvasWidth: Int,
@@ -184,8 +145,6 @@ class CarPlayViewAreas private constructor(
             startPortrait: Boolean,
             sidePanel: Boolean = false,
             rightHandDrive: Boolean = false,
-            sizeWidthsMm: List<Int> = emptyList(), // CarLink
-            sessionWidthMm: Int = 0, // CarLink
         ): CarPlayViewAreas? {
             val splits = screens.associateWith { splitWindow(it.portrait) }
             if (screens.size == 1 && dock.edge == null && splits.values.all { it == null } && !sidePanel &&
@@ -197,13 +156,6 @@ class CarPlayViewAreas private constructor(
             for (screen in screens) for (edge in edges) {
                 areas += AirPlayViewArea(screen.width, screen.height, dockEdge = edge)
                 slots += Slot(Kind.FULL_SCREEN, screen.portrait)
-            }
-            // CarLink: interface-size variants of the whole screen, after the session's own (so the initial area is factor 1).
-            val sizeFactors = sizeWidthsMm.filter { it in 1 until sessionWidthMm }.distinct().map { sessionWidthMm.toFloat() / it }
-            for (factor in sizeFactors) for (screen in screens) for (edge in edges) {
-                areas += AirPlayViewArea((screen.width / factor).toInt().coerceAtLeast(2) and 1.inv(),
-                    (screen.height / factor).toInt().coerceAtLeast(2) and 1.inv(), dockEdge = edge)
-                slots += Slot(Kind.FULL_SCREEN, screen.portrait, sizeFactor = factor)
             }
             for (screen in screens) {
                 val window = splits[screen] ?: continue
@@ -229,7 +181,7 @@ class CarPlayViewAreas private constructor(
             val initial = areas.indices.firstOrNull {
                 slots[it].kind == Kind.FULL_SCREEN && slots[it].portrait == startPortrait && areas[it].dockEdge == dock.edge
             } ?: areas.indices.first { slots[it].kind == Kind.FULL_SCREEN && areas[it].dockEdge == dock.edge }
-            return CarPlayViewAreas(areas, slots, initial).also { it.sessionWidthMm = sessionWidthMm } // CarLink: also
+            return CarPlayViewAreas(areas, slots, initial)
         }
 
         private fun closeShape(area: AirPlayViewArea, width: Int, height: Int): Boolean {

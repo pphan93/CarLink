@@ -497,7 +497,7 @@ class AapTransport(
             AapMessage(Channel.ID_CTR, Control.ControlMsgType.MESSAGE_BYEBYE_REQUEST_VALUE, byebye)
         send(msg)
         SystemClock.sleep(150)
-        quit(closeLink = true) // CarLink: USB too, its poll thread sat in a bulk read for the 1 s join
+        quit(closeLink = isWireless) // CarLink
     }
 
     internal fun quit(clean: Boolean = false, closeLink: Boolean = false) {

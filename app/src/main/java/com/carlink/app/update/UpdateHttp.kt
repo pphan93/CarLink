@@ -130,18 +130,10 @@ fun interface ReleaseSource {
     fun latest(): CheckOutcome
 }
 
-/**
- * [ReleaseSource] on GitHub's `releases/latest`, compared against the installed [current] version;
- * with [testVersions] on, the newest of the release list, pre-releases included.
- */
-class GitHubReleaseSource(
-    private val http: UpdateHttp,
-    private val current: AppVersion,
-    private val testVersions: () -> Boolean = { false },
-) : ReleaseSource {
+/** [ReleaseSource] on GitHub's `releases/latest`, compared against the installed [current] version. */
+class GitHubReleaseSource(private val http: UpdateHttp, private val current: AppVersion) : ReleaseSource {
     override fun latest(): CheckOutcome {
-        val beta = testVersions()
-        val answer = try { http.getText(if (beta) ReleaseRepo.LIST_URL else ReleaseRepo.LATEST_URL, ReleaseRepo.ACCEPT) } catch (e: IOException) {
+        val answer = try { http.getText(ReleaseRepo.LATEST_URL, ReleaseRepo.ACCEPT) } catch (e: IOException) {
             return CheckOutcome.Failed(e.message ?: e.javaClass.simpleName)
         }
         return when {
@@ -149,7 +141,7 @@ class GitHubReleaseSource(
             // No published release yet.
             answer.code == 404 -> CheckOutcome.UpToDate
             answer.code !in 200..299 -> CheckOutcome.Failed("HTTP ${answer.code}")
-            else -> when (val parsed = if (beta) ReleaseParser.newest(answer.body) else ReleaseParser.parse(answer.body)) {
+            else -> when (val parsed = ReleaseParser.parse(answer.body)) {
                 is ParsedRelease.Unusable -> CheckOutcome.UpToDate
                 is ParsedRelease.Usable ->
                     if (parsed.release.version > current) CheckOutcome.Newer(parsed.release) else CheckOutcome.UpToDate
