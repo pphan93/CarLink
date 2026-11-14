@@ -4,7 +4,12 @@ CarLink's releases, newest first. Versions follow `major.minor.patch`; each one 
 [GitHub](https://github.com/pphan93/CarLink/releases) with its APK. The text under each version
 is what the in-app update popup shows.
 
-## [Unreleased] (from upstream 1.0.16)
+## [1.0.22] - 2026-11-13
+
+- Fixed: after disconnecting a wireless CarPlay session, Home could show "Plug in your phone"
+  with no way to reconnect wirelessly until CarLink was reopened (stereos with their own
+  Bluetooth module).
+
 
 - New: change the interface size (Small, Medium, Large) from the floating switcher, live, in
   both CarPlay and Android Auto on a phone or tablet: no reconnect.
