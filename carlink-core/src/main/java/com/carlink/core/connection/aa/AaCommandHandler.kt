@@ -58,6 +58,7 @@ internal class AaCommandHandler(
      * when [WirelessStartPolicy] finds it wedged; a session that is connecting or up is left alone.
      */
     fun startWireless(address: String?, profile: VehicleProfile) {
+        engine.setKeepGroupOnStop(false)
         engine.setUsbOnlySession(false)
         engine.setClaimHiddenBottomStrip(profile == VehicleProfile.BYD_DILINK)
         // Exactly the chosen phone (DA§10.5, §10.7): an empty list pokes every bonded device, and a
@@ -104,6 +105,7 @@ internal class AaCommandHandler(
      * group, no pokes). A closed port comes back as `HEAD_UNIT_SERVER_CLOSED`.
      */
     fun startSelf(profile: VehicleProfile) {
+        engine.setKeepGroupOnStop(false)
         engine.setUsbOnlySession(true)
         engine.setClaimHiddenBottomStrip(profile == VehicleProfile.BYD_DILINK)
         if (!start(AapService.ACTION_START_SELF_MODE)) emit(AaProtocol.KIND_START_REFUSED, "action=${AapService.ACTION_START_SELF_MODE}")
@@ -121,9 +123,13 @@ internal class AaCommandHandler(
      * engine's own USB auto-switch off (`auto-connect-last-session=false`). AapService is started
      * first so its USB receiver sees the phone re-enumerate as an accessory and connects it.
      */
-    fun startUsb(device: UsbDevice?, address: String?, profile: VehicleProfile) {
+    fun startUsb(attached: UsbDevice?, address: String?, profile: VehicleProfile) {
+        // A restart (interface size, Try again) can come without the attach: a phone still in accessory
+        // mode is then the one to reset, not left to an 8 s dead handshake (tablet, 2026-11-11).
+        val device = attached ?: engine.accessoryDevice()
         // No P2P group, poke or wireless server while the phone is on the cable (RELIABILITY_AUDIT
         // K10: the engine pulled a plugged-in phone into wireless Android Auto).
+        engine.setKeepGroupOnStop(false)
         engine.setUsbOnlySession(true)
         engine.setClaimHiddenBottomStrip(profile == VehicleProfile.BYD_DILINK)
         if (address != null) engine.setPokeTargets(address)
@@ -132,7 +138,7 @@ internal class AaCommandHandler(
         // stream (2 s, tablet 2026-10-20). Reset it before the engine starts, then switch it fresh.
         if (device != null && engine.isAccessory(device) && !switchedHere) {
             Log.i(TAG, "phone already an accessory at start; resetting its USB link first")
-            emit(AaProtocol.KIND_AOA_RESWITCH, "result=reset=${engine.resetUsb(device)};device=${engine.deviceName(device)}")
+            emit(AaProtocol.KIND_AOA_RESWITCH, "result=reset=${resetUsb(device)};device=${engine.deviceName(device)}")
             if (!engine.isServiceRunning()) {
                 if (!start(null)) return emit(AaProtocol.KIND_START_REFUSED, "action=start")
                 waitUntil(SERVICE_START_MILLIS) { engine.isServiceRunning() }
@@ -207,7 +213,7 @@ internal class AaCommandHandler(
         val result = when {
             device == null -> "no-accessory"
             engine.isBusy() -> "busy" // a new session is already under way
-            else -> "reset=" + engine.resetUsb(device)
+            else -> "reset=" + resetUsb(device)
         }
         Log.i(TAG, "stale accessory re-switch result=$result")
         emit(AaProtocol.KIND_AOA_RESWITCH, "result=$result" + (device?.let { ";device=${engine.deviceName(it)}" } ?: ""))
@@ -222,6 +228,18 @@ internal class AaCommandHandler(
      * did, and the session failed 3 s later). Some resets keep the phone in accessory mode with no
      * re-attach at all (03:17:21): the old session is gone either way, so a fresh handshake works.
      */
+    /**
+     * The reset right after a stop can fail while the old session still holds the port (size change
+     * from the switcher, tablet 2026-11-11: reset=false, then an 8 s dead handshake). Try a few times.
+     */
+    private fun resetUsb(device: UsbDevice): Boolean {
+        repeat(RESET_TRIES) { i ->
+            if (engine.resetUsb(engine.currentDevice(device) ?: device)) return true
+            if (i < RESET_TRIES - 1) Thread.sleep(RESET_RETRY_MILLIS)
+        }
+        return false
+    }
+
     private fun switchAfterReset() {
         waitUntil(RESET_RETURN_MILLIS) { engine.plainAndroidPhone() != null }
         // A phone that left the bus is still re-enumerating: wait for it instead of giving up
@@ -276,18 +294,25 @@ internal class AaCommandHandler(
      * Ends everything and acknowledges only once AapService is gone and Android Auto's Wi-Fi Direct
      * group is released, so the next engine finds the radio free (design/REBUILD_V2.md §4).
      * `static-bssid` goes back to "0" (DA§10.1): it overrides both credential chains.
+     *
+     * [keepGroup]: the same wireless session starts again at once (the screen turned, a Bluetooth-stage
+     * retry), so Android Auto's own group stays up for it to read: no ~0.6 s create, and the phone
+     * finds the network (name, passphrase and BSSID) it just used. The flag holds until the next start,
+     * because the engine's teardown calls WifiDirectManager.stop() more than once, asynchronously.
      */
-    fun stop(token: Long) {
+    fun stop(token: Long, keepGroup: Boolean = false) {
+        engine.setKeepGroupOnStop(keepGroup)
         val wasRunning = engine.isServiceRunning()
         val serviceStopped = !wasRunning || stopService()
         // AapService.onDestroy → WifiDirectManager.stop() removes the group asynchronously; give
-        // it its own time first, then remove a group that is still ours.
-        val groupReleased = releaseAndroidAutoGroup(waitForEngine = wasRunning)
+        // it its own time first, then remove a group that is still ours. A kept group reads as
+        // "could not tell" (null), never as released.
+        val groupReleased = if (keepGroup) null else releaseAndroidAutoGroup(waitForEngine = wasRunning)
         engine.resetStaticBssid()
         engine.setClaimHiddenBottomStrip(false)
         engine.setUsbOnlySession(false)
         monitor.reset()
-        Log.i(TAG, "stop done serviceStopped=$serviceStopped groupReleased=$groupReleased")
+        Log.i(TAG, "stop done serviceStopped=$serviceStopped groupReleased=$groupReleased keepGroup=$keepGroup")
         ack(token, serviceStopped, groupReleased)
         report()
     }
@@ -370,6 +395,8 @@ internal class AaCommandHandler(
         const val RETRY_SWITCH_MILLIS = 700L
         const val STALE_ACCESSORY_MILLIS = 3_000L
         const val RESET_RETURN_MILLIS = 2_000L
+        const val RESET_TRIES = 4
+        const val RESET_RETRY_MILLIS = 250L
         const val REATTACH_MILLIS = 10_000L
         const val FRONT_MILLIS = 3_000L
     }

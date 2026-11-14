@@ -237,7 +237,13 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
         val now = SystemClock.elapsedRealtime()
         val action = WarmRelaunchKeyframePolicy.decide(
             sessionHasRendered = videoDecoder.hasRenderedThisSession,
-            renderedSinceSurfaceSet = videoDecoder.lastFrameRenderedMs != 0L,
+            // A picture, not just frames: a codec rebuilt mid-stream renders P-frames against no
+            // reference straight away, so on hardware decoders that output them (Qualcomm on BYD
+            // DiLink 3.0) "a frame rendered" read as repaired while the screen showed coloured
+            // streaks, and the cycle was never spent - the picture waited up to a minute for the
+            // phone's own keyframe after the driver came back from another app.
+            renderedSinceSurfaceSet = videoDecoder.lastFrameRenderedMs != 0L &&
+                videoDecoder.keyframeDecodedSinceStart,
             transportStarted = commManager.connectionState.value is CommManager.ConnectionState.TransportStarted,
             msSinceSurfaceSet = now - lastSurfaceSetMs,
             // The link, not the video channel. An idle Android Auto screen sends no video for
@@ -246,7 +252,8 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
             msSinceLinkActivity = linkQuietMs(),
             linkQuietThresholdMs = ProjectionWatchdogPolicy.LINK_QUIET_MS,
             cycleAlreadySpent = warmRelaunchCycleSpent,
-            msSinceLastRequest = now - lastVideoFocusRequestMs
+            msSinceLastRequest = now - lastVideoFocusRequestMs,
+            escalateAfterSurfaceMs = warmRelaunchWindowMs()
         )
         when (action) {
             WarmRelaunchKeyframePolicy.Action.NONE -> return
@@ -286,6 +293,11 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
      * the window itself.
      */
     private val warmRelaunchCheckRunnable = Runnable { maybeRecoverWarmRelaunch() }
+
+    /** Only the SurfaceView backend releases video focus when its surface goes away. */
+    private fun warmRelaunchWindowMs(): Long = WarmRelaunchKeyframePolicy.escalateAfterSurfaceMs(
+        teardownReleasesFocus = ::projectionView.isInitialized && projectionView is ProjectionView
+    )
 
     private var focusCycleGainPending = false
 
@@ -757,6 +769,7 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.andrerinas.openheadunit.HostIntegration.relayoutTurningScreen = { runOnUiThread { postTurnMargins() } } // CarLink
         // [FIX] applyOrientationSettings() must be called AFTER super.onCreate() so that the
         // Activity window is fully initialized before we lock the orientation. Calling it before
         // super.onCreate() caused SCREEN_ORIENTATION_LOCKED to inherit the orientation context
@@ -1556,10 +1569,7 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
         lastSurfaceSetMs = SystemClock.elapsedRealtime()
         warmRelaunchCycleSpent = false
         watchdogHandler.removeCallbacks(warmRelaunchCheckRunnable)
-        watchdogHandler.postDelayed(
-            warmRelaunchCheckRunnable,
-            WarmRelaunchKeyframePolicy.ESCALATE_AFTER_SURFACE_MS
-        )
+        watchdogHandler.postDelayed(warmRelaunchCheckRunnable, warmRelaunchWindowMs())
 
         // --- Surface Mismatch Detection ---
         // Compare actual surface dimensions with what HeadUnitScreenConfig negotiated.
@@ -1874,6 +1884,7 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
     private val bydFullscreen = com.andrerinas.openheadunit.utils.BydFullscreen()
 
     override fun onDestroy() {
+        com.andrerinas.openheadunit.HostIntegration.relayoutTurningScreen = null // CarLink
         bydFullscreen.release()
         super.onDestroy()
         if (isFinishReceiverRegistered) {

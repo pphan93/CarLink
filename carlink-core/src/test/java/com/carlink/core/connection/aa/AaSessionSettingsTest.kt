@@ -1,6 +1,7 @@
 package com.carlink.core.connection.aa
 
 import com.carlink.core.core.Transport
+import com.carlink.core.settings.InterfaceSize
 import com.carlink.core.settings.Picture
 import com.carlink.core.settings.UnifiedSettings
 import com.carlink.core.settings.VehicleProfile
@@ -112,6 +113,11 @@ class AaSessionSettingsTest {
         assertEquals(2, v["resolutionId"])
         assertEquals(30, v["fps-limit"])
         assertEquals(0, v["dpi-pixel-density"])
+        for ((size, percent) in listOf(InterfaceSize.SMALL to 80, InterfaceSize.MEDIUM to 100, InterfaceSize.LARGE to 135)) {
+            val sized = values(settings = base.copy(interfaceSize = size)).values
+            assertEquals(0, sized["dpi-pixel-density"])
+            assertEquals(percent, sized[AaSessionSettings.SIZE_PERCENT_KEY])
+        }
         val custom = values(settings = base.copy(picture = Picture.CUSTOM)).values
         assertFalse(custom.containsKey("resolutionId"))
     }
@@ -138,9 +144,31 @@ class AaSessionSettingsTest {
         // Portrait and an unknown picture keep the device's density.
         assertEquals(320, AaSessionSettings.automaticDensityDpi(320, 720, 1280))
         assertEquals(320, AaSessionSettings.automaticDensityDpi(320, 0, 0))
-        // A phone as the screen: a head unit's density, not the phone's, in both orientations.
-        assertEquals(160, AaSessionSettings.automaticDensityDpi(300, 720, 1560, handheld = true))
-        assertEquals(160, AaSessionSettings.automaticDensityDpi(300, 1560, 720, handheld = true))
+        // A phone or tablet as the screen: CarPlay's rule, measured (long side = 250 mm at Medium), in both orientations.
+        assertEquals(158, AaSessionSettings.automaticDensityDpi(300, 720, 1560, handheld = true))
+        assertEquals(158, AaSessionSettings.automaticDensityDpi(300, 1560, 720, handheld = true))
         assertEquals(120, AaSessionSettings.automaticDensityDpi(120, 1560, 720, handheld = true))
+        assertEquals(260, AaSessionSettings.automaticDensityDpi(320, 2560, 1600, handheld = true))
+        // Small and Large scale the Automatic density, not the panel's own (Large was 384 dpi on a 320 dpi tablet).
+        assertEquals(351, AaSessionSettings.automaticDensityDpi(320, 2560, 1600, handheld = true, sizePercent = 135))
+        assertEquals(208, AaSessionSettings.automaticDensityDpi(320, 2560, 1600, handheld = true, sizePercent = 80))
+        // The 748x450 dp floor still caps Large: 800x480 at 160 dpi allows 170.
+        assertEquals(170, AaSessionSettings.automaticDensityDpi(160, 800, 480, sizePercent = 135))
+    }
+
+    @Test fun soundLevelsBecomeDiAutosOffsetsAndTheMicrophoneHook() {
+        val v = values(UnifiedSettings(mediaLevelDb = -6, navigationLevelDb = 6, callLevelDb = 3, micGainDb = 9,
+            resumeMusic = true)).values
+        assertEquals(-50, v["media-volume-offset"])
+        // Android Auto's speech channel carries the directions (and the Assistant); its system channel the chimes.
+        assertEquals(100, v["assistant-volume-offset"])
+        assertEquals(100, v["navigation-volume-offset"])
+        assertEquals(9, v[AaSessionSettings.MIC_GAIN_KEY])
+        assertEquals(true, v[AaSessionSettings.RESUME_MUSIC_KEY])
+        val normal = values().values
+        for (key in listOf("media-volume-offset", "assistant-volume-offset", "navigation-volume-offset", AaSessionSettings.MIC_GAIN_KEY)) {
+            assertEquals("every session writes $key", 0, normal[key])
+        }
+        assertEquals(false, normal[AaSessionSettings.RESUME_MUSIC_KEY])
     }
 }

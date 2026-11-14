@@ -32,6 +32,7 @@ import com.carlink.core.detect.PairedPhone
 import com.carlink.core.detect.PhonesRepository
 import com.carlink.app.ui.UiPreferences
 import com.carlink.core.settings.ConnectionMethod
+import com.carlink.core.settings.InterfaceSize
 import com.carlink.core.settings.UnifiedSettingsStore
 import com.carlink.app.ui.HomeActivity
 import com.carlink.app.ui.switcher.SwitchPrompt
@@ -275,6 +276,8 @@ object SwitcherController {
             otherPhones = candidates(active),
             usbKinds = com.carlink.app.ui.premium.usbPhoneKinds(app),
             method = UnifiedSettingsStore(app).load().connectionMethod,
+            interfaceSize = UnifiedSettingsStore(app).load().interfaceSize,
+            dayNight = UnifiedSettingsStore(app).load().dayNight, dimmer = ScreenDimmer.level,
             edge = bubble?.let { if (it.params.x + geometry.bubble / 2 < geometry.screenWidth / 2) Edge.LEFT else Edge.RIGHT }
                 ?: Edge.RIGHT,
         )
@@ -378,12 +381,50 @@ object SwitcherController {
             panelUi = panelUi?.copy(method = method, page = SwitcherPage.MAIN)
         }
 
+        override fun setInterfaceSize(size: InterfaceSize) {
+            val store = UnifiedSettingsStore(app)
+            store.save(store.load().copy(interfaceSize = size))
+            val engine = panelUi?.engine
+            closePanel()
+            // The size is agreed when the session starts: restart it with the same phone and transport,
+            // unless the session can take it live (Android Auto on a turning screen; CarPlay with a
+            // size area declared at start). The saved size starts the next session natively (sharp).
+            if (engine == com.carlink.core.core.Engine.CARPLAY) {
+                val mm = com.carlink.core.connection.CarPlaySettingsPolicy.widthMm(size)
+                if (mm == null || !com.shilapi.xcertplay.CarPlayHostIntegration.setInterfaceSizeLive(mm)) Connection.get(app).retry()
+                return
+            }
+            if (engine != com.carlink.core.core.Engine.ANDROID_AUTO) return Connection.get(app).retry()
+            com.carlink.core.connection.aa.AaLiveSize.request(app, com.carlink.core.connection.aa.AaSessionSettings.sizePercent(size)) { live ->
+                if (!live) Connection.get(app).retry()
+            }
+        }
+
         override fun disconnect() {
             closePanel()
             Connection.get(app).disconnect()
         }
 
         override fun close() = closePanel()
+
+        override fun cycleDayNight() {
+            val store = UnifiedSettingsStore(app)
+            val next = com.carlink.app.ui.switcher.nextDayNight(store.load().dayNight)
+            store.save(store.load().copy(dayNight = next))
+            panelUi = panelUi?.copy(dayNight = next)
+        }
+
+        override fun cycleDimmer() {
+            ScreenDimmer.set(app, com.carlink.app.ui.switcher.nextDimLevel(ScreenDimmer.level, ScreenDimmer.ALPHAS.size))
+            panelUi = panelUi?.copy(dimmer = ScreenDimmer.level)
+        }
+
+        override fun openStereoLauncher() {
+            closePanel()
+            runCatching {
+                app.startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }.onFailure { Log.w(TAG, "cannot open the stereo's launcher", it) }
+        }
     }
 
     // ---- Switch prompt ------------------------------------------------------------------------

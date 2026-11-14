@@ -7,6 +7,7 @@ import com.carlink.core.connection.PictureChoice
 import com.carlink.core.connection.PicturePolicy
 import com.carlink.core.core.Transport
 import com.carlink.core.engine.AndroidAutoSettings
+import com.carlink.core.settings.AudioLevels
 import com.carlink.core.settings.DayNight
 import com.carlink.core.settings.InterfaceSize
 import com.carlink.core.settings.Picture
@@ -85,6 +86,7 @@ object AaSessionSettings {
             // window on the cluster display). Off everywhere: CarLink has no setting for it yet,
             // and it is untested beyond DiLink 5.1. A BYD-only setting can turn it on later.
             put("cluster-map-enabled", false)
+            put(com.carlink.core.detect.ScreenType.KEY, com.carlink.core.detect.ScreenType.encode())
             putPicture(settings, panelDensityDpi, picture)
             // 0 = follow the screen's rotation. The picture size is agreed once per session, so a
             // turned screen reports ORIENTATION_CHANGED and SessionManager reconnects (issue #31).
@@ -102,6 +104,15 @@ object AaSessionSettings {
             // The learned steering-wheel buttons, in DiAuto's own keymap (logical-physical), which
             // CommManager.sendKey applies to every key route. CarLink owns the keymap: always written.
             put("key-codes", WheelKeys.diAutoKeyCodes(settings.wheelKeys))
+            // Sound levels as DiAuto's own offsets. Android Auto's speech channel (DiAuto's "assistant")
+            // carries the spoken directions as well as the Assistant, and its system channel (DiAuto's
+            // "navigation") the prompts' chimes, so both follow the navigation level. Calls are not
+            // Android Auto audio (they go over Bluetooth hands-free), so the call level has nothing here.
+            put("media-volume-offset", AudioLevels.aaOffsetPercent(settings.mediaLevelDb))
+            put("assistant-volume-offset", AudioLevels.aaOffsetPercent(settings.navigationLevelDb))
+            put("navigation-volume-offset", AudioLevels.aaOffsetPercent(settings.navigationLevelDb))
+            put(MIC_GAIN_KEY, settings.micGainDb)
+            put(RESUME_MUSIC_KEY, settings.resumeMusic)
             // The engine's Bluetooth route for mode 3 (design/EXTERNAL_BLUETOOTH.md). A wireless
             // session runs only where CarLink's pre-flight allowed it, so without a module route it
             // is NORMAL: DiAuto's own markers must not refuse a stereo CarLink judged usable
@@ -168,13 +179,17 @@ object AaSessionSettings {
             Picture.LIGHT -> { put("resolutionId", 1); put("fps-limit", 30) }
             Picture.CUSTOM -> Unit // Advanced owns the exact values.
         }
-        when (settings.interfaceSize) {
-            // Lower DPI draws Android Auto's controls smaller, matching CarPlay's wider panel.
-            InterfaceSize.SMALL -> put("dpi-pixel-density", (panelDensityDpi * 0.85f).roundToInt())
-            InterfaceSize.MEDIUM -> put("dpi-pixel-density", 0)
-            InterfaceSize.LARGE -> put("dpi-pixel-density", (panelDensityDpi * 1.2f).roundToInt())
-            InterfaceSize.CUSTOM -> Unit
-        }
+        // Small and Large scale the Automatic density, which already fits this screen: scaling the
+        // panel's own density made Large 2.4x Medium on a 320 dpi tablet whose Automatic is 160.
+        put(SIZE_PERCENT_KEY, sizePercent(settings.interfaceSize))
+        if (settings.interfaceSize != InterfaceSize.CUSTOM) put("dpi-pixel-density", 0)
+    }
+
+    /** Interface size as a percentage of the Automatic density (Custom: Advanced owns the DPI). */
+    fun sizePercent(size: InterfaceSize): Int = when (size) {
+        InterfaceSize.SMALL -> 80
+        InterfaceSize.MEDIUM, InterfaceSize.CUSTOM -> 100
+        InterfaceSize.LARGE -> 135
     }
 
     /**
@@ -185,15 +200,44 @@ object AaSessionSettings {
      * margins. Portrait is left alone: the floor is a landscape one. A typed DPI never comes here.
      * A [handheld] screen (phone, tablet) starts from a head unit's 160 dpi instead of its own: at a
      * phone's 300+ dpi Android Auto drew a phone-sized layout, while CarPlay on the same screen is laid
-     * out for a car-sized display (2026-11-10, Galaxy S25 as the screen).
+     * out for a car-sized display (2026-11-10, Galaxy S25 as the screen). [sizePercent] is the
+     * driver's interface size (Small 80, Large 135; 85/120 were too close to tell apart); the 748x450 dp floor still caps it.
      */
-    fun automaticDensityDpi(deviceDpi: Int, visibleWidthPx: Int, visibleHeightPx: Int, handheld: Boolean = false): Int {
-        val base = if (handheld) minOf(deviceDpi, HANDHELD_DPI) else deviceDpi
+    fun automaticDensityDpi(deviceDpi: Int, visibleWidthPx: Int, visibleHeightPx: Int, handheld: Boolean = false,
+                            sizePercent: Int = 100): Int {
+        val base = ((if (handheld) handheldDpi(deviceDpi, visibleWidthPx, visibleHeightPx) else deviceDpi) * sizePercent / 100f).roundToInt()
         if (visibleWidthPx <= 0 || visibleHeightPx <= 0 || visibleHeightPx > visibleWidthPx) return base
         return minOf(base, visibleWidthPx * 160 / MIN_WIDTH_DP, visibleHeightPx * 160 / MIN_HEIGHT_DP)
     }
 
     private const val HANDHELD_DPI = 160
+
+    /**
+     * A phone or tablet as the screen gets CarPlay's own size rule (CarPlaySettings: Medium tells the
+     * iPhone the screen's long side is 300 mm), so both projections draw the same size: a fixed 160 dpi
+     * left Android Auto about 1.4x smaller than CarPlay on a 2560x1600 tablet (2026-11-12). Never above
+     * the screen's own density; 160 when the size is unknown.
+     */
+    private fun handheldDpi(deviceDpi: Int, w: Int, h: Int): Int {
+        val longSide = maxOf(w, h)
+        if (longSide <= 0) return minOf(deviceDpi, HANDHELD_DPI)
+        return minOf(deviceDpi, (longSide * MM_PER_INCH / HANDHELD_MEDIUM_WIDTH_MM).roundToInt())
+    }
+
+    /**
+     * CarPlay's 300 mm Medium measured against Android Auto side by side on the tablet: CarPlay's dock and
+     * labels still came out about 1.2x Android Auto's at 300 mm, so Android Auto is laid out for 250 mm.
+     */
+    private const val HANDHELD_MEDIUM_WIDTH_MM = 250f
+
+    private const val MM_PER_INCH = 25.4f
+
+    /** DiAuto preferences read by CarLink's hooks in ":aa" (AaEngineHooks): microphone gain in dB, resume music. */
+    const val MIC_GAIN_KEY = "carlink-mic-gain-db"
+    const val RESUME_MUSIC_KEY = "carlink-resume-music"
+
+    /** DiAuto preference with [sizePercent], read by the Automatic density hook in ":aa". */
+    const val SIZE_PERCENT_KEY = "carlink-interface-percent"
 
     private const val MIN_WIDTH_DP = 748
     private const val MIN_HEIGHT_DP = 450

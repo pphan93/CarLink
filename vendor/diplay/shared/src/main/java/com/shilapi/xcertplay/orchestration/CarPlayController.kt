@@ -158,6 +158,27 @@ internal fun isWirelessHandoffInProgress(
 ): Boolean = handoffRequested || tunnelActive || sessionActive
 
 /**
+ * True when an RFCOMM EOF should keep the Wi-Fi tunnel instead of failing bring-up.
+ *
+ * A clean Bluetooth EOF is [Iap2LinkEngine.feedEof], which dies with no reason. The link
+ * pump then throws [IOException] "iAP2 link ended", so [Iap2WirelessControlClient.run]
+ * never returns [Iap2WirelessControlTerminal.CHANNEL_CLOSED]. Once an AirPlay session is
+ * up, a frame has rendered, or this generation has sent CarPlayStartSession and received the
+ * phone's session SETUP (deviceID) on an accepted AirPlay control connection. Before any of
+ * those, the bring-up failure path still runs. A SETUP-only keep-alive is provisional: the
+ * caller must fail the generation if no session arrives.
+ */
+internal fun isRfcommEofAfterAirPlaySession(
+    error: Throwable,
+    sessionActive: Boolean,
+    frameRendered: Boolean,
+    airPlaySetupReached: Boolean = false,
+): Boolean =
+    (sessionActive || frameRendered || airPlaySetupReached) &&
+        error is IOException &&
+        error.message?.contains("iAP2 link ended") == true
+
+/**
  * Wires the complete wired or wireless CarPlay path: MFi coprocessor discovery, iPhone bring-up,
  * iAP2 control, transport setup, and the AirPlay media/input sessions.
  *
@@ -239,6 +260,7 @@ class CarPlayController(
     private var permissionPollGeneration = 0
     private var reenumerationAttempts = 0
     @Volatile private var wiredDeviceName: String? = null
+    @Volatile private var wiredReuseCandidate: Pair<String, String>? = null // CarLink: serial to device name, WiredReuseMemory
     private val usbAdbGrantAttempts = mutableSetOf<String>()
     private val pendingUsbAdbGrants = mutableSetOf<String>()
     private var lastReportedStatus: CarPlayStatus? = null
@@ -299,6 +321,9 @@ class CarPlayController(
     @Volatile private var wiredStartWatchdog: WiredStartWatchdog? = null
     @Volatile private var wiredSessionActive = false
     @Volatile private var wiredStartSentAtNanos: Long? = null
+    // CarLink: WiredStuckReset inputs.
+    @Volatile private var wiredTcpAccepted = false
+    @Volatile private var wiredNewPairing = false
     @Volatile private var wirelessPublishedAddress: InetAddress? = null
     @Volatile private var wirelessAlternateAddress: InetAddress? = null
     @Volatile private var wirelessAddressRecovery: HotspotAddressRecovery? = null
@@ -321,6 +346,9 @@ class CarPlayController(
     private val wirelessHandoffFellBack = AtomicBoolean(false)
     private val wirelessGeneration = AtomicInteger(0)
     private val wirelessConnectionProof = WirelessConnectionProof<AirPlaySession>()
+    private val wirelessAirPlayHandshake = WirelessAirPlayHandshake()
+    @Volatile private var setupKeepAliveWatch: SetupKeepAliveWatch? = null
+    @Volatile private var setupKeepAliveTask: Runnable? = null
 
     private var permissionCloseable: Closeable? = null
     private var attachCloseable: Closeable? = null
@@ -378,6 +406,14 @@ class CarPlayController(
         override fun onSessionActive(session: AirPlaySession) {
             wiredSessionActive = true
             wiredStartWatchdog?.sessionActive()
+            if (config.transport == CarPlayTransport.WIRED) WiredStuckReset.sessionReached() // CarLink
+            wiredReuseCandidate?.let { (serial, node) -> // CarLink: WiredReuseMemory
+                wiredReuseCandidate = null
+                if (config.transport == CarPlayTransport.WIRED && wiredDeviceName == node) {
+                    WiredReuseMemory.remember(appContext, serial)
+                    debugLog("wired: remembered that this iPhone reuses its mode after a session on the same enumeration")
+                }
+            }
             if (currentCornerMask?.session !== session) currentCornerMask = null
             val replacement = activeSession !== session
             if (replacement) {
@@ -425,6 +461,7 @@ class CarPlayController(
                     nowPlayingListener?.invoke(cleared)
                     if (wasPlaying) playbackListener?.invoke(false)
                 }
+                onPhonePlaying?.invoke(null) // CarLink
             }
             debugLog("AirPlay session ended peer=${session.host}")
             uiListener?.onSessionEnded(session)
@@ -491,6 +528,7 @@ class CarPlayController(
             debugLog(message)
             // CarLink: CarPlayVpnService reports a wired accept only as this log line.
             if (config.transport == CarPlayTransport.WIRED && message.startsWith("airplay TCP accepted")) {
+                wiredTcpAccepted = true
                 wiredTimeline.mark(WiredStartupTimeline.Milestone.TCP_ACCEPTED)
             }
         }
@@ -746,6 +784,7 @@ class CarPlayController(
         }
         firstTcpWatchdog?.terminate()
         wiredStartWatchdog?.terminate()
+        cancelSetupKeepAlive()
         BydBluetoothSuspend.resume(appContext, this) { debugLog(it) }
         startupTimer.shutdownNow()
         (hotspot as? ManualHotspotManager)?.close()
@@ -909,6 +948,7 @@ class CarPlayController(
         }?.let { (update, playingChanged) ->
             nowPlayingListener?.invoke(update)
             if (playingChanged) playbackListener?.invoke(update.playing)
+            if (playingChanged) onPhonePlaying?.invoke(update.playing) // CarLink
         }
     }
 
@@ -1443,6 +1483,7 @@ class CarPlayController(
             wirelessConnectionProof.begin(generation) {
                 if (!isStaleWirelessRun(generation)) startedHotspot?.onCarPlayConfirmed()
             }
+            wirelessAirPlayHandshake.begin(generation) // CarLink: upstream PR #1178
             // CarLink: Wi-Fi Direct tries the IPv6 link-local endpoint first (WirelessAddressFamilyPlan).
             val familyChoice = WirelessAddressFamilyPlan.choose(
                 hotspotInfo.backend,
@@ -1709,12 +1750,15 @@ class CarPlayController(
                 Iap2WirelessLinkRole.RUNTIME_TUNNEL,
                 wirelessIdentification,
             )
+            val endpointAddresses = (listOf(hostAddress) + hotspotInfo.hostAddresses.filter { it != hostAddress }) // CarLink: upstream PR #1071
+                .map { hostAddressText(it) }
+                .distinct()
             val endpoint = Iap2WirelessCarPlayEndpoint(
                 ssid = hotspotInfo.ssid,
                 passphrase = hotspotInfo.passphrase,
                 channel = hotspotInfo.channel,
                 security = hotspotInfo.security,
-                ipAddresses = listOf(hostAddressText),
+                ipAddresses = endpointAddresses,
                 airPlayPort = listenerPort,
                 deviceIdentifier = deviceIdentifier,
                 publicKey = identity.publicKeyHex,
@@ -1745,7 +1789,10 @@ class CarPlayController(
                 timeoutMillis = controlLoopTimeoutMillis(),
                 keepAliveAfterDeadline = { keepBluetoothControlAlive(generation) },
                 beforeStartSession = { startedHotspot?.validateReady() },
-                onStartSessionSent = { watchdog.startSessionSent(it.sentAtNanos) },
+                onStartSessionSent = {
+                    wirelessAirPlayHandshake.noteStartSession(generation)
+                    watchdog.startSessionSent(it.sentAtNanos)
+                },
                 onIncoming = ::onRouteFrame,
                 onProgress = { message ->
                     diagnostics.controlProgress(message)
@@ -1792,6 +1839,35 @@ class CarPlayController(
             }
         } catch (error: Throwable) {
             if (isStaleWirelessRun(generation)) {
+                return
+            }
+            // EOF throws instead of returning CHANNEL_CLOSED. After a session, a rendered
+            // frame, or this generation's deviceID SETUP, keep the Wi-Fi tunnel. wirelessActiveReported
+            // stays on its existing post-handoff path, and an early EOF still fails below.
+            val sessionActive = activeSession != null
+            val frameRendered = wirelessConnectionProof.hasRenderedFrame(generation)
+            val airPlaySetupReached = wirelessAirPlayHandshake.reachedSessionSetup(generation)
+            if (
+                !wirelessActiveReported.get() &&
+                isRfcommEofAfterAirPlaySession(
+                    error,
+                    sessionActive = sessionActive,
+                    frameRendered = frameRendered,
+                    airPlaySetupReached = airPlaySetupReached,
+                )
+            ) {
+                if (sessionActive || frameRendered) {
+                    debugLog(
+                        "wireless RFCOMM ended after AirPlay session started; " +
+                            "keeping the Wi-Fi AirPlay tunnel alive",
+                    )
+                } else {
+                    debugLog(
+                        "wireless RFCOMM ended after AirPlay SETUP; " +
+                            "keeping the Wi-Fi AirPlay tunnel alive pending session",
+                    )
+                    armSetupKeepAlive(generation)
+                }
                 return
             }
             if (wirelessActiveReported.get() && error !is Error) {
@@ -1894,20 +1970,33 @@ class CarPlayController(
             override fun onTcpAccepted(event: AirPlayTcpAccepted) {
                 if (isStaleWirelessRun(generation)) return
                 if (watchdog.accepted(event)) {
+                    wirelessAirPlayHandshake.noteTcpAccepted(generation) // CarLink: upstream PR #1178
                     wirelessDiagnostics?.connectionAccepted()
                     externalAcceptPending = true
                 }
             }
 
+            override fun onDeviceInfo(session: AirPlaySession, info: AirPlayDeviceInfo) {
+                if (!isStaleWirelessRun(generation) && info.deviceId.isNotEmpty()) {
+                    wirelessAirPlayHandshake.noteSessionSetup(generation)
+                }
+                sessionListener.onDeviceInfo(session, info)
+            }
+
             override fun onTransportError(message: String) {
                 if (isStaleWirelessRun(generation)) return
                 watchdog.terminate()
+                failSetupKeepAliveIfWaiting(
+                    generation,
+                    "Wireless CarPlay AirPlay control connection failed: $message",
+                )
                 sessionListener.onTransportError(message)
             }
 
             override fun onSessionActive(session: AirPlaySession) {
                 if (isStaleWirelessRun(generation) || !watchdog.sessionEstablished()) return
                 wirelessTimeline.mark(WirelessStartupTimeline.Phase.SESSION_ACTIVE) // CarLink
+                cancelSetupKeepAlive() // CarLink: upstream PR #1178
                 wirelessDiagnostics?.let {
                     it.sessionActive()
                     it.close()
@@ -1920,8 +2009,15 @@ class CarPlayController(
 
             override fun onSessionEnded(session: AirPlaySession) {
                 if (isStaleWirelessRun(generation)) return
+                val wasActive = activeSession === session
                 wirelessConnectionProof.end(generation, session)
                 sessionListener.onSessionEnded(session)
+                if (!wasActive) {
+                    failSetupKeepAliveIfWaiting(
+                        generation,
+                        "Wireless CarPlay AirPlay control connection closed before the session",
+                    )
+                }
             }
 
             override fun onVideoFrameRendered(session: AirPlaySession) {
@@ -2010,6 +2106,61 @@ class CarPlayController(
             wirelessConnectionProof.hasRenderedFrame(generation)
     }
 
+    /**
+     * SETUP arrived and RFCOMM already ended, but RECORD has not. [FirstTcpWatchdog] has already
+     * stopped at the TCP accept, and TCP keepalive does not call [fail]. This deadline does.
+     */
+    private fun armSetupKeepAlive(generation: Int) {
+        cancelSetupKeepAlive()
+        val watch = SetupKeepAliveWatch(generation)
+        watch.arm()
+        setupKeepAliveWatch = watch
+        val task = Runnable {
+            if (setupKeepAliveWatch !== watch) return@Runnable
+            val failed = watch.onDeadline(
+                currentGeneration = wirelessGeneration.get(),
+                sessionActive = activeSession != null,
+                frameRendered = wirelessConnectionProof.hasRenderedFrame(generation),
+            )
+            if (!failed) return@Runnable
+            debugLog(
+                "wireless AirPlay SETUP did not reach a session within " +
+                    "${WirelessStartupPolicy.SETUP_SESSION_WAIT_MILLIS}ms",
+            )
+            Thread(
+                { failSetupKeepAlive(generation, "Wireless CarPlay AirPlay SETUP did not reach a session") },
+                "diplay-setup-session-timeout",
+            ).apply {
+                isDaemon = true
+                start()
+            }
+        }
+        setupKeepAliveTask = task
+        mainHandler.postDelayed(task, WirelessStartupPolicy.SETUP_SESSION_WAIT_MILLIS)
+    }
+
+    private fun cancelSetupKeepAlive() {
+        setupKeepAliveTask?.let { mainHandler.removeCallbacks(it) }
+        setupKeepAliveTask = null
+        setupKeepAliveWatch?.cancel()
+        setupKeepAliveWatch = null
+    }
+
+    private fun failSetupKeepAliveIfWaiting(generation: Int, message: String) {
+        val watch = setupKeepAliveWatch ?: return
+        if (setupKeepAliveWatch !== watch) return
+        if (!watch.onControlLost(wirelessGeneration.get(), activeSession != null)) return
+        cancelSetupKeepAlive()
+        failSetupKeepAlive(generation, message)
+    }
+
+    private fun failSetupKeepAlive(generation: Int, message: String) {
+        if (closed || phase != Phase.WIRELESS || generation != wirelessGeneration.get()) return
+        if (activeSession != null || wirelessConnectionProof.hasRenderedFrame(generation)) return
+        fail(IOException(message), generation)
+        closeWirelessStack(generation = generation)
+    }
+
     private fun armWirelessHandoffWatchdog(generation: Int) {
         mainHandler.postDelayed(
             {
@@ -2093,6 +2244,7 @@ class CarPlayController(
         pendingUsbAdbGrants.clear()
         phase = Phase.IPHONE
         reenumerationAttempts = 0
+        wiredReuseCandidate = null // CarLink
         iphoneWaitStartedAt = null
         onStatus(CarPlayStatus.DiscoveringIphone)
         checkIphoneAvailability()
@@ -2232,20 +2384,32 @@ class CarPlayController(
                         val configuration = IphoneCarPlayConfiguration.find(result.device)
                         val carPlayMode = configuration?.let(IphoneCarPlayConfiguration::isCarPlayMode) == true
                         val sessionAlreadyStarted = WiredSessionMemory.startedOn(result.device.deviceName)
+                        // CarLink: WiredReuseMemory; the serial needs the permission granted here.
+                        val reuseSerial = if (sessionAlreadyStarted && carPlayMode) {
+                            runCatching { result.device.serialNumber }.getOrNull()?.takeIf { it.isNotBlank() }
+                        } else null
+                        val reuseRemembered = reuseSerial != null && WiredReuseMemory.knows(appContext, reuseSerial)
                         val action = WiredConfigurationAction.choose(
                             found = configuration != null,
                             carPlayMode = carPlayMode,
                             transitionsTried = reenumerationAttempts,
                             maximumTransitions = MAXIMUM_REENUMERATION_ATTEMPTS,
                             sessionAlreadyStarted = sessionAlreadyStarted,
+                            reuseRemembered = reuseRemembered,
                         )
                         connectionDiagnostic(
                             "USB configuration ready=${configuration != null} " +
                                 "configurationId=${configuration?.id ?: "none"} " +
                                 "reenumerationAttempts=$reenumerationAttempts " +
                                 (if (sessionAlreadyStarted && carPlayMode) "previousSessionOnThisEnumeration=true " else "") +
+                                (if (reuseRemembered) "reuseRemembered=true " else "") + // CarLink
                                 "action=${action.diagnostic}",
                         )
+                        // CarLink: a reuse on the same enumeration (remembered, or after an ignored request) is
+                        // remembered when it reaches an AirPlay session; a remembered one is forgotten until then.
+                        wiredReuseCandidate = reuseSerial?.takeIf { action == WiredConfigurationAction.USE }
+                            ?.also { if (reuseRemembered) WiredReuseMemory.forget(appContext, it) }
+                            ?.let { it to result.device.deviceName }
                         when (action) {
                             WiredConfigurationAction.USE,
                             WiredConfigurationAction.USE_WITHOUT_APPLE_ETHERNET -> openDataPaths(result.device)
@@ -2338,7 +2502,11 @@ class CarPlayController(
      * session left wired CarPlay waiting for minutes (#335). Without an attach the iPhone is looked at again,
      * which uses the mode it already offers, as before the request.
      */
-    private fun watchReenumeration(device: UsbDevice) = lookForReenumeratedIphone(device, REENUMERATION_WAIT_MILLIS) // CarLink: upstream PR #1251
+    private fun watchReenumeration(device: UsbDevice) = lookForReenumeratedIphone(device, // CarLink: upstream PR #1251
+        // CarLink: an iPhone asked again on the enumeration of the session that just ended ignores the request
+        // (tablet 2026-11-11, interface-size restart: 10 s unanswered, then the same mode worked in 1.5 s); one
+        // that honours it leaves the bus within about a second. Look again sooner in that case.
+        if (WiredSessionMemory.startedOn(device.deviceName)) SAME_ENUMERATION_WAIT_MILLIS else REENUMERATION_WAIT_MILLIS)
 
     /**
      * Some head units never broadcast the attach of the iPhone back in CarPlay mode, which left wired CarPlay
@@ -2357,7 +2525,7 @@ class CarPlayController(
             when {
                 listed != null -> {
                     connectionDiagnostic(
-                        "USB transition unanswered after ${REENUMERATION_WAIT_MILLIS}ms count=$attempt; checking the iPhone again",
+                        "USB transition unanswered after ${delayMillis}ms count=$attempt; checking the iPhone again",
                     )
                     requestIphonePermission(listed)
                 }
@@ -2408,6 +2576,7 @@ class CarPlayController(
     private fun openDataPaths(device: UsbDevice) {
         phase = Phase.DATAPATHS
         wiredTimeline.mark(WiredStartupTimeline.Milestone.DATA_PATHS) // CarLink
+        armWiredStuckReset(device) // CarLink
         wiredDeviceName = device.deviceName
         debugLog("wired opening iPhone USB data paths")
         onStatus(CarPlayStatus.SelectingConfiguration)
@@ -2703,14 +2872,39 @@ class CarPlayController(
         }
     }
 
-    private fun pairNewRecord(client: LockdownPairingClient): LockdownPairRecord =
-        client.pair(
+    private fun pairNewRecord(client: LockdownPairingClient): LockdownPairRecord {
+        wiredNewPairing = true // CarLink: the iPhone may be asking its owner (Trust, use CarPlay); see WiredStuckReset.
+        return client.pair(
             label = config.label,
             hostId = hostId,
             systemBuid = systemBuid,
             totalTimeoutMillis = PAIR_TIMEOUT_MILLIS,
             isCancelled = { closed },
         ).pairRecord.also(savePairRecord)
+    }
+
+    // CarLink: a wired start with no CarPlay session 8 s after the data paths gets one USB reset (WiredStuckReset).
+    private fun armWiredStuckReset(device: UsbDevice) {
+        if (resetWiredUsb == null) return
+        wiredTcpAccepted = false
+        wiredNewPairing = false
+        runCatching {
+            startupTimer.schedule({ checkWiredStuck(device) }, WiredStuckReset.STUCK_AFTER_MILLIS, TimeUnit.MILLISECONDS)
+        }
+    }
+
+    private fun checkWiredStuck(device: UsbDevice) {
+        val reset = resetWiredUsb ?: return
+        if (closed ||
+            !WiredStuckReset.shouldReset(System.nanoTime(), wiredSessionActive, wiredTcpAccepted, wiredNewPairing)) return
+        debugLog(
+            "wired start: no CarPlay session ${WiredStuckReset.STUCK_AFTER_MILLIS / 1000} s after the USB data paths " +
+                "opened (phase=$phase startSessionSent=${wiredStartSentAtNanos != null}); resetting the iPhone's USB once",
+        )
+        val done = runCatching { reset(device) }.getOrDefault(false)
+        debugLog("wired USB reset done=$done")
+        if (done && !closed) fail(IphoneUsbException.TimedOut("The iPhone did not start CarPlay over USB; its USB was reset"))
+    }
 
     private fun rejectedPairRecordError(error: Throwable): String? {
         var cause: Throwable? = error
@@ -3064,6 +3258,8 @@ class CarPlayController(
             wirelessDiagnostics = null
             diagnostics?.close()
             wirelessConnectionProof.clear()
+            wirelessAirPlayHandshake.clear()
+            cancelSetupKeepAlive()
             media.setIapTunnelHandler(null)
             val activeTunnel = wirelessTunnelChannel
             wirelessTunnelChannel = null
@@ -3507,6 +3703,14 @@ class CarPlayController(
         @Volatile
         @JvmStatic
         var usbAttachAgeMillis: ((UsbDevice) -> Long?)? = null
+        /** CarLink: resets the iPhone's USB (USBDEVFS_RESET), true when done; null = never (upstream). See WiredStuckReset. */
+        @Volatile
+        @JvmStatic
+        var resetWiredUsb: ((UsbDevice) -> Boolean)? = null
+        /** CarLink: the iPhone's play state at each change it reports; null when the AirPlay session ended. */
+        @Volatile
+        @JvmStatic
+        var onPhonePlaying: ((Boolean?) -> Unit)? = null
         /** CarLink: how long Bonjour waits for the group's IPv6 link-local before starting without it. */
         private const val BONJOUR_LINK_LOCAL_WAIT_MILLIS = 600L
 
@@ -3539,6 +3743,7 @@ class CarPlayController(
         private const val MAXIMUM_REENUMERATION_ATTEMPTS = 2
         /** An iPhone answers the mode request within about a second; one took six (#335). */
         const val REENUMERATION_WAIT_MILLIS = 10_000L
+        const val SAME_ENUMERATION_WAIT_MILLIS = 2_500L // CarLink
         private const val IPHONE_NOT_LISTED_AFTER_MILLIS = 20_000L
         private const val START_SESSION_PROGRESS = "iap2 tx=0x4301"
         private const val EXECUTOR_CLOSE_TIMEOUT_MILLIS = 2_000L

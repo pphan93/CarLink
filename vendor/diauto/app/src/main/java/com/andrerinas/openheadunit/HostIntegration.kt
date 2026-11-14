@@ -100,6 +100,19 @@ object HostIntegration {
     @JvmStatic
     var turningScreen: Boolean = false
 
+    /**
+     * CarLink: the turning-screen region is this many times smaller than the session's (>= 1), so
+     * Android Auto's layout grows live with a margin change instead of a reconnect (interface size).
+     */
+    @Volatile
+    @JvmStatic
+    var turnSizeFactor: Float = 1f
+
+    /** CarLink: set by the projection screen; re-sends the turning-screen margins after [turnSizeFactor] changes. */
+    @Volatile
+    @JvmStatic
+    var relayoutTurningScreen: (() -> Unit)? = null
+
     /** CarLink: what [onEngineEvent] reports. Detail strings are `key=value` pairs joined by `;`. */
     enum class EngineEvent {
         /** The Wi-Fi radio is off, so the Wi-Fi Direct route cannot start (API 29+ cannot turn it on). */
@@ -149,6 +162,11 @@ object HostIntegration {
         ORIENTATION_CHANGED,
         /** CarLink: this unit could not create its Wi-Fi Direct group at all (#40). Detail: `reason=`. */
         WIFI_DIRECT_GROUP_FAILED,
+        /**
+         * CarLink: a dropped wireless session is offered the network again on the held Bluetooth
+         * channel (`QuickReconnectPolicy`). Detail: `result=started|fallback` (fallback: the full re-arm runs).
+         */
+        QUICK_RECONNECT,
     }
 
     /**
@@ -198,6 +216,24 @@ object HostIntegration {
     var usbOnlySession: Boolean = false
 
     /**
+     * CarLink: the next stop leaves this engine's own Wi-Fi Direct group up, for a restart of the
+     * same wireless session to read instead of recreating it (after open-headunit's
+     * NativeGroupKeepPolicy). The host sets it per stop and clears it at the next start. Default false.
+     */
+    @Volatile
+    @JvmStatic
+    var keepWifiDirectGroupOnStop: Boolean = false
+
+    /**
+     * CarLink: on a turning screen, ask for the 1440p (H.265) stream below a 2560-pixel panel too.
+     * The host sets it when the hardware HEVC decoder carries 2560x1440 at 60 fps: the zoomed sizes
+     * show a region of the stream scaled up, so a larger stream keeps them sharp. Default false.
+     */
+    @Volatile
+    @JvmStatic
+    var turningHighResStream: Boolean = false
+
+    /**
      * CarLink: the density announced when the DPI setting is Automatic (0), from the device's own
      * density and the visible codec area (codec size less margins, in pixels). Null = the device's
      * density (standalone).
@@ -205,4 +241,14 @@ object HostIntegration {
     @Volatile
     @JvmStatic
     var automaticDensityDpi: ((deviceDpi: Int, visibleWidthPx: Int, visibleHeightPx: Int) -> Int)? = null
+
+    /** CarLink: scales each microphone read (16-bit PCM, in place) before it is sent to the phone. */
+    @Volatile
+    @JvmStatic
+    var microphonePcm: ((data: ByteArray, length: Int) -> Unit)? = null
+
+    /** CarLink: the phone's play state from each media playback status it sends. */
+    @Volatile
+    @JvmStatic
+    var onPhonePlaying: ((Boolean) -> Unit)? = null
 }

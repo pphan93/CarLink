@@ -15,6 +15,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,7 +59,7 @@ internal fun CategoryPage(
         when (category) {
             SettingsCategory.CONNECTION -> ConnectionEssentials(ui, actions, openSheet)
             SettingsCategory.DISPLAY -> DisplayEssentials(ui, openSheet)
-            SettingsCategory.SOUND -> SoundEssentials(ui, openSheet)
+            SettingsCategory.SOUND -> SoundEssentials(ui, actions, openSheet)
             SettingsCategory.NAVIGATION -> NavigationEssentials(ui, actions)
             SettingsCategory.CAR -> CarEssentials(ui, openSheet)
             SettingsCategory.GENERAL -> GeneralEssentials(ui, actions, openSheet, versionTaps, onVersionTap)
@@ -137,6 +141,14 @@ private fun ConnectionEssentials(ui: SettingsUi, actions: SettingsActions, openS
         GroupDivider()
         LinkRow(stringResource(R.string.carlink_settings_permissions), actions::openAppSettings,
             stringResource(R.string.carlink_settings_permissions_detail), R.drawable.carlink_ic_lock, external = true)
+        if (ui.phones.isNotEmpty()) {
+            var repairing by rememberSaveable { mutableStateOf(false) }
+            GroupDivider()
+            LinkRow(stringResource(R.string.carlink_repair_action), { repairing = true },
+                stringResource(R.string.carlink_repair_settings_detail), R.drawable.carlink_ic_bluetooth_searching)
+            if (repairing) com.carlink.app.ui.home.ForgetRepairDialog(ui.phones, null,
+                { repairing = false; actions.forgetAndRepair(it) }, { repairing = false })
+        }
     }
 }
 
@@ -186,15 +198,54 @@ private fun DisplayEssentials(ui: SettingsUi, openSheet: (String) -> Unit) {
 }
 
 @Composable
-private fun SoundEssentials(ui: SettingsUi, openSheet: (String) -> Unit) {
-    val bluetooth = ui.unified.soundThroughCarBluetooth
+private fun SoundEssentials(ui: SettingsUi, actions: SettingsActions, openSheet: (String) -> Unit) {
+    val u = ui.unified
+    val bluetooth = u.soundThroughCarBluetooth
     GlassGroup(header = { GroupHeader(stringResource(R.string.carlink_settings_group_sound)) }) {
         ChoiceRow(stringResource(R.string.carlink_settings_sound),
             stringResource(if (bluetooth) R.string.carlink_settings_sound_bluetooth else R.string.carlink_settings_sound_carlink),
             { openSheet(SheetKey.of(EssentialSheet.SOUND)) }, description = stringResource(R.string.carlink_settings_sound_detail),
             icon = if (bluetooth) R.drawable.carlink_ic_bluetooth else R.drawable.carlink_ic_volume_up)
+        GroupDivider()
+        ChoiceRow(stringResource(R.string.carlink_settings_audio_delay), audioDelayLabel(ui.unified.audioDelay),
+            { openSheet(SheetKey.of(EssentialSheet.AUDIO_DELAY)) }, description = stringResource(R.string.carlink_settings_audio_delay_detail),
+            icon = R.drawable.carlink_ic_graphic_eq, tags = { NextConnectionTag() })
+        GroupDivider()
+        SwitchRow(stringResource(R.string.carlink_settings_resume_music), u.resumeMusic,
+            { on -> actions.update { it.copy(resumeMusic = on) } },
+            description = stringResource(R.string.carlink_settings_resume_music_detail), icon = R.drawable.carlink_ic_play_arrow)
+    }
+    GlassGroup(header = { GroupHeader(stringResource(R.string.carlink_settings_group_levels)) }) {
+        ChoiceRow(stringResource(R.string.carlink_settings_level_media), levelLabel(u.mediaLevelDb),
+            { openSheet(SheetKey.of(EssentialSheet.MEDIA_LEVEL)) }, description = stringResource(R.string.carlink_settings_level_media_detail),
+            icon = R.drawable.carlink_ic_volume_up, tags = { NextConnectionTag() })
+        GroupDivider()
+        ChoiceRow(stringResource(R.string.carlink_settings_level_navigation), levelLabel(u.navigationLevelDb),
+            { openSheet(SheetKey.of(EssentialSheet.NAVIGATION_LEVEL)) },
+            description = stringResource(R.string.carlink_settings_level_navigation_detail),
+            icon = R.drawable.carlink_ic_navigation, tags = { NextConnectionTag() })
+        GroupDivider()
+        ChoiceRow(stringResource(R.string.carlink_settings_level_calls), levelLabel(u.callLevelDb),
+            { openSheet(SheetKey.of(EssentialSheet.CALL_LEVEL)) }, description = stringResource(R.string.carlink_settings_level_calls_detail),
+            icon = R.drawable.carlink_ic_call, tags = { NextConnectionTag() })
+        GroupDivider()
+        ChoiceRow(stringResource(R.string.carlink_settings_call_stream),
+            stringResource(if (u.callAudioAsMedia) R.string.carlink_settings_call_stream_media else R.string.carlink_settings_call_stream_phone),
+            { openSheet(SheetKey.of(EssentialSheet.CALL_STREAM)) }, description = stringResource(R.string.carlink_settings_call_stream_detail),
+            icon = R.drawable.carlink_ic_phone_iphone, tags = { NextConnectionTag() })
+    }
+    GlassGroup(header = { GroupHeader(stringResource(R.string.carlink_settings_group_microphone)) }) {
+        ChoiceRow(stringResource(R.string.carlink_settings_mic_gain), levelLabel(u.micGainDb),
+            { openSheet(SheetKey.of(EssentialSheet.MIC_GAIN)) }, description = stringResource(R.string.carlink_settings_mic_gain_detail),
+            icon = R.drawable.carlink_ic_mic, tags = { NextConnectionTag() })
     }
 }
+
+/** "Normal" for 0 dB, else a signed dB value. */
+@Composable
+internal fun levelLabel(db: Int): String =
+    if (db == 0) stringResource(R.string.carlink_settings_level_normal)
+    else stringResource(R.string.carlink_settings_level_db, if (db > 0) "+$db" else "−${-db}")
 
 @Composable
 private fun NavigationEssentials(ui: SettingsUi, actions: SettingsActions) {
@@ -274,6 +325,12 @@ private fun GeneralEssentials(ui: SettingsUi, actions: SettingsActions, openShee
         GroupDivider()
         LinkRow(stringResource(R.string.carlink_settings_setup_again), { actions.navigate(Route.SETUP) },
             stringResource(R.string.carlink_settings_setup_again_detail), R.drawable.carlink_ic_restart_alt)
+        GroupDivider()
+        LinkRow(stringResource(R.string.carlink_backup_action), actions::backupSettings,
+            stringResource(R.string.carlink_backup_detail), R.drawable.carlink_ic_ios_share)
+        GroupDivider()
+        LinkRow(stringResource(R.string.carlink_restore_action), actions::restoreSettings,
+            stringResource(R.string.carlink_restore_detail), R.drawable.carlink_ic_download)
     }
     GlassGroup(header = { GroupHeader(stringResource(R.string.carlink_settings_group_about)) }) {
         val remaining = LAB_TAPS - versionTaps

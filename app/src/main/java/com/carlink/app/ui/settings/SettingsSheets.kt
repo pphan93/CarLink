@@ -65,7 +65,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import com.carlink.app.R
+import com.carlink.core.settings.AudioLevels
 import com.carlink.core.settings.Applies
+import com.carlink.core.settings.AudioDelay
 import com.carlink.core.settings.CarBrand
 import com.carlink.core.settings.VehicleProfile
 import com.carlink.core.settings.ConnectionMethod
@@ -193,6 +195,50 @@ internal fun SettingsSheetHost(key: String?, ui: SettingsUi, actions: SettingsAc
                     R.drawable.carlink_ic_bluetooth),
             ),
             u.soundThroughCarBluetooth, onSelect = { b -> select { it.copy(soundThroughCarBluetooth = b) } }, onDismiss = onDismiss,
+        )
+        EssentialSheet.AUDIO_DELAY -> ChoiceSheet(
+            stringResource(R.string.carlink_settings_audio_delay), stringResource(R.string.carlink_settings_audio_delay_detail), true,
+            AudioDelay.entries.map { a ->
+                Preset(a, audioDelayLabel(a), stringResource(when (a) {
+                    AudioDelay.LOW -> R.string.carlink_settings_audio_delay_low_detail
+                    AudioDelay.NORMAL -> R.string.carlink_settings_audio_delay_normal_detail
+                    AudioDelay.HIGH -> R.string.carlink_settings_audio_delay_high_detail
+                }))
+            },
+            u.audioDelay, onSelect = { a -> select { it.copy(audioDelay = a) } }, onDismiss = onDismiss,
+        )
+        EssentialSheet.MEDIA_LEVEL, EssentialSheet.NAVIGATION_LEVEL, EssentialSheet.CALL_LEVEL, EssentialSheet.MIC_GAIN -> {
+            val sheet = SheetKey.essential(key)!!
+            val (title, body, current) = when (sheet) {
+                EssentialSheet.MEDIA_LEVEL -> Triple(R.string.carlink_settings_level_media, R.string.carlink_settings_level_sheet_body, u.mediaLevelDb)
+                EssentialSheet.NAVIGATION_LEVEL ->
+                    Triple(R.string.carlink_settings_level_navigation, R.string.carlink_settings_level_sheet_body, u.navigationLevelDb)
+                EssentialSheet.CALL_LEVEL -> Triple(R.string.carlink_settings_level_calls, R.string.carlink_settings_level_sheet_body, u.callLevelDb)
+                else -> Triple(R.string.carlink_settings_mic_gain, R.string.carlink_settings_mic_gain_sheet_body, u.micGainDb)
+            }
+            val choices = if (sheet == EssentialSheet.MIC_GAIN) AudioLevels.MIC_DB else AudioLevels.PLAYBACK_DB
+            ChoiceSheet(stringResource(title), stringResource(body), true,
+                choices.map { Preset(it, levelLabel(it)) }, current,
+                onSelect = { db ->
+                    select {
+                        when (sheet) {
+                            EssentialSheet.MEDIA_LEVEL -> it.copy(mediaLevelDb = db)
+                            EssentialSheet.NAVIGATION_LEVEL -> it.copy(navigationLevelDb = db)
+                            EssentialSheet.CALL_LEVEL -> it.copy(callLevelDb = db)
+                            else -> it.copy(micGainDb = db)
+                        }
+                    }
+                }, onDismiss = onDismiss)
+        }
+        EssentialSheet.CALL_STREAM -> ChoiceSheet(
+            stringResource(R.string.carlink_settings_call_stream), stringResource(R.string.carlink_settings_call_stream_detail), true,
+            listOf(
+                Preset(false, stringResource(R.string.carlink_settings_call_stream_phone),
+                    stringResource(R.string.carlink_settings_call_stream_phone_detail), R.drawable.carlink_ic_call),
+                Preset(true, stringResource(R.string.carlink_settings_call_stream_media),
+                    stringResource(R.string.carlink_settings_call_stream_media_detail), R.drawable.carlink_ic_volume_up),
+            ),
+            u.callAudioAsMedia, onSelect = { b -> select { it.copy(callAudioAsMedia = b) } }, onDismiss = onDismiss,
         )
         EssentialSheet.APPEARANCE -> ChoiceSheet(
             stringResource(R.string.carlink_settings_appearance), stringResource(R.string.carlink_settings_appearance_detail), false,

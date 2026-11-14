@@ -16,7 +16,6 @@ import com.andrerinas.openheadunit.App
 import com.andrerinas.openheadunit.HostIntegration
 import com.andrerinas.openheadunit.aap.AapService
 import com.andrerinas.openheadunit.connection.UsbAccessoryMode
-import com.andrerinas.openheadunit.connection.UsbNative
 import com.andrerinas.openheadunit.connection.UsbDeviceCompat
 import com.andrerinas.openheadunit.utils.Settings
 import com.carlink.core.detect.UsbAttachTimes
@@ -77,6 +76,8 @@ internal interface AaEngineAccess {
     fun plainAndroidPhone(): UsbDevice?
     /** DiAuto's `HostIntegration.usbOnlySession`: no wireless bring-up while true. */
     fun setUsbOnlySession(usbOnly: Boolean)
+    /** DiAuto's `HostIntegration.keepWifiDirectGroupOnStop`: the engine's stop leaves its group up. */
+    fun setKeepGroupOnStop(keep: Boolean)
     fun sleep(millis: Long)
     fun now(): Long
 }
@@ -220,23 +221,7 @@ internal class DiAutoEngineAccess(context: Context) : AaEngineAccess {
             .getOrDefault(false)
     }
 
-    // USBDEVFS_RESET through libusb on our own fd; SELinux lets apps ioctl a usb_device they opened
-    // (open-headunit eafe3261 recovers a stale accessory the same way).
-    override fun resetUsb(device: UsbDevice): Boolean {
-        val connection = app.getSystemService(UsbManager::class.java)?.openDevice(device) ?: return false
-        return try {
-            val native = UsbNative()
-            if (!native.wrap(connection, 0, 0)) return false
-            native.reset()
-            native.close()
-            true
-        } catch (e: Throwable) {
-            Log.w(TAG, "USB reset threw ${e.javaClass.simpleName}: ${e.message}")
-            false
-        } finally {
-            connection.close()
-        }
-    }
+    override fun resetUsb(device: UsbDevice): Boolean = com.carlink.core.connection.UsbReset.reset(app, device)
 
     override fun deviceName(device: UsbDevice): String = UsbDeviceCompat(device).uniqueName
 
@@ -260,6 +245,10 @@ internal class DiAutoEngineAccess(context: Context) : AaEngineAccess {
 
     override fun setUsbOnlySession(usbOnly: Boolean) {
         HostIntegration.usbOnlySession = usbOnly
+    }
+
+    override fun setKeepGroupOnStop(keep: Boolean) {
+        HostIntegration.keepWifiDirectGroupOnStop = keep
     }
 
     override fun sleep(millis: Long) = Thread.sleep(millis)
