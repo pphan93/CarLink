@@ -291,6 +291,15 @@ class CarLinkViewModel(application: Application) : AndroidViewModel(application)
             }
             phonesRepository.refresh() // a module stereo lists the phones CarLink knows
         }
+        // A probe re-taken later (the module's daemon came up after boot) must reach Home too.
+        viewModelScope.launch {
+            com.carlink.core.detect.ExternalBluetoothProbe.reports.collect { report ->
+                if (report != null && report != _stereoBluetooth.value) {
+                    _stereoBluetooth.value = report
+                    phonesRepository.refresh()
+                }
+            }
+        }
         phonesRepository.start()
         runCatching {
             androidx.core.content.ContextCompat.registerReceiver(app, usbReceiver, android.content.IntentFilter().apply {

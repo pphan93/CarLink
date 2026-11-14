@@ -306,7 +306,13 @@ object ExternalBluetoothProbe {
     /** ... but only this long after the process's first probe: the module's daemon is up by then. */
     private const val RECHECK_WINDOW_MILLIS = 180_000L
 
-    @Volatile private var cached: StereoBluetoothReport? = null
+    // Observable, so Home follows a re-taken report (a boot-time EXTERNAL_UNKNOWN left Home on "cable only").
+    private val latest = kotlinx.coroutines.flow.MutableStateFlow<StereoBluetoothReport?>(null)
+    /** Every full report as it is taken (null before the first). */
+    val reports: kotlinx.coroutines.flow.StateFlow<StereoBluetoothReport?> = latest
+    private var cached: StereoBluetoothReport?
+        get() = latest.value
+        set(value) { latest.value = value }
     private var task: FutureTask<StereoBluetoothReport>? = null
     private var firstAt = 0L
     private var lastAt = 0L
