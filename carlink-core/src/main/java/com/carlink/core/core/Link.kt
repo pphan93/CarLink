@@ -141,6 +141,8 @@ enum class LinkNoticeKind {
      * (DiPlay #249, #975). Offered only while DiPlay's Direct video output is off.
      */
     NO_PICTURE,
+    /** The car hotspot was off and CarLink is switching it on before it starts. */
+    TURNING_ON_HOTSPOT,
 }
 
 /** What CarLink does about a slow step, as the driver is told it. */

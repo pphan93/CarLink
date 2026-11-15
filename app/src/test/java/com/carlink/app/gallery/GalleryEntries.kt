@@ -114,6 +114,11 @@ private fun homeEntries(): List<GalleryEntry> = with(HomeFakes) { listOf(
             notice = com.carlink.core.core.LinkNotice(com.carlink.core.core.LinkNoticeKind.RETRYING,
                 reason = LinkProblem.BLUETOOTH)), phones = listOf(pixel.copy(connected = true))), actions)
     },
+    // The car hotspot was off: CarLink switches it on before it starts.
+    home("connecting-turning-on-hotspot") {
+        HomeContent(ui(link = LinkState(LinkStage.WAITING, Engine.CARPLAY, Transport.WIRELESS, iphone.name, 1, 4,
+            notice = com.carlink.core.core.LinkNotice(com.carlink.core.core.LinkNoticeKind.TURNING_ON_HOTSPOT))), actions)
+    },
     // iOS 27: the iPhone plays sound but sends no picture; one tap turns on Direct video output and reconnects.
     home("connecting-notice-no-picture") {
         HomeContent(ui(link = LinkState(LinkStage.CONNECTING, Engine.CARPLAY, Transport.WIRELESS, iphone.name, 4, 4,

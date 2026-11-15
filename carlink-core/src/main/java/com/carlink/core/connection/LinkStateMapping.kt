@@ -15,7 +15,9 @@ import com.carlink.core.settings.WirelessPath
  */
 fun SessionState.toLinkState(directVideoOutput: Boolean = true): LinkState = when (this) {
     SessionState.Idle -> LinkState.Idle
-    is SessionState.Blocked -> LinkState(LinkStage.FAILED, request.engine, request.shownTransport, request.phoneName,
+    is SessionState.Blocked -> if (turningOnHotspot) LinkState(LinkStage.WAITING, request.engine, request.shownTransport,
+        request.phoneName, 1, STEPS, notice = LinkNotice(LinkNoticeKind.TURNING_ON_HOTSPOT))
+    else LinkState(LinkStage.FAILED, request.engine, request.shownTransport, request.phoneName,
         problem = problems.first().toLinkProblem())
     is SessionState.Failed -> LinkState(LinkStage.FAILED, request.engine, request.shownTransport, request.phoneName,
         detail = detail, problem = reason.toLinkProblem())

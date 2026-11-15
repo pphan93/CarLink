@@ -61,7 +61,12 @@ sealed interface SessionState {
     data object Idle : SessionState
 
     /** The request cannot start until the driver fixes [problems]. */
-    data class Blocked(val request: SessionRequest, val problems: List<Problem>) : SessionState
+    data class Blocked(
+        val request: SessionRequest,
+        val problems: List<Problem>,
+        /** CarLink is switching the car hotspot on itself; the driver only needs its settings if that fails. */
+        val turningOnHotspot: Boolean = false,
+    ) : SessionState
 
     data class Active(
         val request: SessionRequest,
@@ -688,14 +693,17 @@ class SessionManager(
             // The hotspot was the only thing missing: switch it on and start again (once per start).
             if (problems == listOf(Problem.CAR_HOTSPOT_OFF) && hotspotTriedFor != sessionToken) {
                 hotspotTriedFor = sessionToken
+                // Home shows "Turning on the car hotspot…", not the error, while the switch runs.
+                _state.value = SessionState.Blocked(request, problems, turningOnHotspot = true)
                 val trying = environment.turnOnCarHotspot { on ->
                     main.post {
                         if (sessionToken != token || _state.value !is SessionState.Blocked) return@post
                         note(if (on) "car hotspot is on; starting again" else "could not switch the car hotspot on")
                         if (on) begin(request, paths, index, sessionToken, phase, notice, warm)
+                        else _state.value = SessionState.Blocked(request, problems)
                     }
                 }
-                if (trying) note("switching the car hotspot on")
+                if (trying) note("switching the car hotspot on") else _state.value = SessionState.Blocked(request, problems)
             }
             return
         }

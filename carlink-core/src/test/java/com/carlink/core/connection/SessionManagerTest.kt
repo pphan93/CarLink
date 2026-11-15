@@ -11,6 +11,7 @@ import com.carlink.core.core.PhoneKind
 import com.carlink.core.core.Transport
 import com.carlink.core.settings.WirelessPath
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -84,8 +85,10 @@ class SessionManagerTest {
         override fun rememberWorkingPath(engine: Engine, phoneAddress: String, path: WirelessPath) { remembered += phoneAddress to path }
         override fun rememberPhone(phoneAddress: String, kind: PhoneKind?, name: String?) { rememberedKinds += phoneAddress to kind }
         var hotspotComesOn: Boolean? = null
+        var hotspotSwitch: ((done: (Boolean) -> Unit) -> Unit)? = null
         var hotspotTries = 0
         override fun turnOnCarHotspot(done: (Boolean) -> Unit): Boolean {
+            hotspotSwitch?.let { it(done); return true }
             val on = hotspotComesOn ?: return false
             hotspotTries++
             if (on) problems = { _, _ -> emptyList() }
@@ -173,6 +176,18 @@ class SessionManagerTest {
         assertEquals(1, env.hotspotTries)
         assertTrue(starts.isEmpty())
         assertEquals(listOf(Problem.CAR_HOTSPOT_OFF), (m.state.value as SessionState.Blocked).problems)
+        assertFalse((m.state.value as SessionState.Blocked).turningOnHotspot) // only now the settings button
+    }
+
+    @Test fun anOffCarHotspotShowsTurningOnWhileTheSwitchRuns() {
+        problems = { _, _ -> listOf(Problem.CAR_HOTSPOT_OFF) }
+        var finish: ((Boolean) -> Unit)? = null
+        env.hotspotSwitch = { finish = it }
+        val m = manager()
+        m.connect("AA:BB", PhoneKind.IPHONE, "iPhone"); idle()
+        assertTrue((m.state.value as SessionState.Blocked).turningOnHotspot)
+        finish!!(false); idle()
+        assertFalse((m.state.value as SessionState.Blocked).turningOnHotspot)
     }
 
     @Test fun blockedRequestsNeverOpenAnEngine() {

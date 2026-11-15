@@ -210,6 +210,7 @@
     <string name="carlink_notice_fresh_wifi">Taking longer than usual: reconnecting Wi-Fi…</string>
     <string name="carlink_notice_try_direct">Trying Wi-Fi Direct instead</string>
     <string name="carlink_notice_try_hotspot">Trying the car hotspot instead</string>
+    <string name="carlink_notice_turning_on_hotspot">Turning on the car hotspot…</string>
     <string name="carlink_notice_try_same_wifi">Trying your Wi-Fi instead</string>
     <string name="carlink_notice_try_other">Trying another way to connect</string>
     <string name="carlink_notice_replug">Unplug the %1$s and plug it in again</string>
