@@ -4,6 +4,11 @@ CarLink's releases, newest first. Versions follow `major.minor.patch`; each one 
 [GitHub](https://github.com/pphan93/CarLink/releases) with its APK. The text under each version
 is what the in-app update popup shows.
 
+## [1.0.24] - 2026-11-14
+
+- Improved: when the car hotspot is off, Home now shows "Turning on the car hotspot…" while
+  CarLink switches it on. The button to the hotspot settings appears only if that fails.
+
 ## [1.0.23] - 2026-11-14
 
 - Removed the upstream CarLink 1.0.16 additions that came with 1.0.22 (live interface size,
