@@ -4,6 +4,12 @@ CarLink's releases, newest first. Versions follow `major.minor.patch`; each one 
 [GitHub](https://github.com/pphan93/CarLink/releases) with its APK. The text under each version
 is what the in-app update popup shows.
 
+## [1.0.25] - 2026-11-15
+
+- Fixed: on stereos with their own Bluetooth module, wireless CarPlay could stay on "wireless is
+  not available" after the car woke from sleep until CarLink was reopened. It now starts as soon
+  as the stereo's Bluetooth is ready.
+
 ## [1.0.24] - 2026-11-14
 
 - Improved: when the car hotspot is off, Home now shows "Turning on the car hotspot…" while
