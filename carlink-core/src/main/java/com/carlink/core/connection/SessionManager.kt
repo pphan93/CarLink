@@ -175,6 +175,12 @@ class SessionManager(
          */
         fun wirelessUnavailable(engine: Engine): Boolean = false
 
+        /**
+         * The stereo-Bluetooth probe may still change its answer (taken before the module started):
+         * take it again until it is final or changes, then call [changed] on any thread. No-op when final.
+         */
+        fun recheckStereo(changed: () -> Unit) {}
+
         /** Problems that prevent [request] on [path] (pre-flight; does not open anything). */
         fun preflight(request: SessionRequest, path: WirelessPath?): List<Problem>
         /** Wireless paths to try for [request], in order (see [WirelessPolicy]). */
@@ -606,6 +612,14 @@ class SessionManager(
         retry()
     }
 
+    /** The stereo-Bluetooth probe changed: a start blocked on the external module starts once wireless is available. */
+    fun onStereoProbe() {
+        val s = _state.value as? SessionState.Blocked ?: return
+        if (Problem.EXTERNAL_BLUETOOTH !in s.problems || environment.wirelessUnavailable(s.request.engine)) return
+        note("stereo Bluetooth probe changed; starting the blocked request again")
+        start(s.request)
+    }
+
     /** The driver cancelled or disconnected: stop, and pause automatic starts until they connect. */
     fun disconnect() {
         note("driver disconnect")
@@ -651,6 +665,10 @@ class SessionManager(
         if (request.transport == Transport.WIRELESS && !request.selfMode && environment.wirelessUnavailable(request.engine)) {
             note("${request.engine} blocked: wireless is not available on this stereo (external Bluetooth module)")
             _state.value = SessionState.Blocked(request, listOf(Problem.EXTERNAL_BLUETOOTH))
+            // A probe taken while the car woke said "external module"; the next one, a second later,
+            // did not, and the start stayed blocked for 20 min (2026-11-15 log). Check again.
+            val blockedToken = token
+            environment.recheckStereo { main.post { if (blockedToken == token) onStereoProbe() } }
             return
         }
         val paths = if (request.transport == Transport.WIRELESS && !request.selfMode) {
