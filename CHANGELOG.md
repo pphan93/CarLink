@@ -4,7 +4,7 @@ CarLink's releases, newest first. Versions follow `major.minor.patch`; each one 
 [GitHub](https://github.com/pphan93/CarLink/releases) with its APK. The text under each version
 is what the in-app update popup shows.
 
-## [Unreleased]
+## [1.0.26] - 2026-11-22
 
 - Back: the upstream CarLink 1.0.16 additions removed in 1.0.23 (live interface size, Screen
   type, Sound settings, switcher quick toggles, settings backup).
