@@ -85,6 +85,24 @@ class PicturePolicyTest {
         assertEquals(50, choice.carPlayScalePercent) // 960x540 is the first CarPlay size within 1280x720 pixels
     }
 
+    /** Low-end round 5: a 1 GB, 4-core 1024x600 unit is constrained: AA 480p on SurfaceView, CarPlay capped, 30 fps. */
+    @Test fun aOneGigabyteUnitGetsTheConstrainedPicture() {
+        val unit = DeviceSignals(totalRamMb = 980, lowRamDevice = false, cpuCores = 4, supportedAbis = listOf("armeabi-v7a"))
+        assertTrue(unit.constrained)
+        val panel = VideoSize(1024, 600)
+        val choice = PicturePolicy.choose(caps(panel, decoder(panel, p1080), signals = unit))
+        assertEquals(AaResolution.P480.id, choice.aaResolutionId)
+        assertEquals(30, choice.aaFps)
+        assertEquals(true, choice.aaSurfaceView)
+        assertEquals(100, choice.carPlayScalePercent) // 1024x600 is inside the 1280x720 cap
+        assertEquals(30, choice.carPlayFps)
+        // A 1920x720 panel on the same unit: CarPlay drops to 75 % (1440x540) under the cap.
+        val wide = VideoSize(1920, 720)
+        assertEquals(75, PicturePolicy.choose(caps(wide, decoder(wide, p1080), signals = unit)).carPlayScalePercent)
+        // 2 GB is not constrained.
+        assertFalse(unit.copy(totalRamMb = 1_870).constrained)
+    }
+
     /**
      * Issue #4: a cheap Android 12 stereo, 2 GB, 8 cores at 1.6 GHz, GPU not probed yet, iPhone over
      * USB. CarPlay: the panel at 30 fps in H.264 (as before) and now Direct video output (SurfaceView).
@@ -143,6 +161,20 @@ class PicturePolicyTest {
         assertTrue(VideoSize(720, 1280) in PicturePolicy.probeSizes(panel))
         val choice = PicturePolicy.choose(caps(panel, decoder(panel, p720)))
         assertEquals(AaResolution.P720.id, choice.aaResolutionId)
+    }
+
+    @Test fun aTurningScreenAsksFor1440pOnlyWhereTheHevcDecoderCarriesIt() {
+        val phone = VideoSize(2400, 1080)
+        val hevc60 = DecoderInfo("c2.qti.hevc.decoder", true, mapOf(PicturePolicy.AA_1440P to 60))
+        assertTrue(PicturePolicy.turningHighRes(DeviceCapabilities(phone, strong, null, hevc60)))
+        assertTrue("portrait reads the same", PicturePolicy.turningHighRes(DeviceCapabilities(phone.swapped(), strong, null, hevc60)))
+        val hevc30 = hevc60.copy(maxFps = mapOf(PicturePolicy.AA_1440P to 30))
+        assertFalse("30 fps at 1440p is not enough", PicturePolicy.turningHighRes(DeviceCapabilities(phone, strong, null, hevc30)))
+        assertFalse("software HEVC never", PicturePolicy.turningHighRes(DeviceCapabilities(phone, strong, null, hevc60.copy(hardware = false))))
+        assertFalse("no HEVC: Android Auto has no 1440p H.264", PicturePolicy.turningHighRes(DeviceCapabilities(phone, strong, null, null)))
+        assertFalse("low-end stays at 1080p", PicturePolicy.turningHighRes(DeviceCapabilities(phone, weak, null, hevc60)))
+        assertFalse("a 1280x800 panel gains little", PicturePolicy.turningHighRes(DeviceCapabilities(VideoSize(1280, 800), strong, null, hevc60)))
+        assertTrue(PicturePolicy.AA_1440P in PicturePolicy.probeSizes(phone))
     }
 
     @Test fun panelClassesFollowDiAuto() {

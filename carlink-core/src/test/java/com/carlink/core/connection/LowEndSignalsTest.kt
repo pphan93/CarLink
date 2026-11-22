@@ -64,4 +64,14 @@ class LowEndSignalsTest {
         assertFalse(EnginePrewarmPolicy.shouldPrewarm(tablet, listOf(PhoneKind.IPHONE)))
         assertTrue(EnginePrewarmPolicy.shouldPrewarm(tablet, listOf(PhoneKind.IPHONE, PhoneKind.ANDROID)))
     }
+
+    @Test fun aThreeGbUnitPrewarmsUntilItKnowsOnlyIPhones() {
+        val threeGb = DeviceSignals(totalRamMb = 2_780, lowRamDevice = false, cpuCores = 8, supportedAbis = arm)
+        assertTrue("no phone known yet", EnginePrewarmPolicy.shouldPrewarm(threeGb, emptyList()))
+        assertTrue(EnginePrewarmPolicy.shouldPrewarm(threeGb, listOf(PhoneKind.ANDROID)))
+        assertFalse("only iPhones: Android Auto starts when one first connects",
+            EnginePrewarmPolicy.shouldPrewarm(threeGb, listOf(PhoneKind.IPHONE)))
+        assertFalse("a low-RAM build stays safe", EnginePrewarmPolicy.shouldPrewarm(threeGb.copy(lowRamDevice = true), emptyList()))
+        assertFalse("2 GB stays as before", EnginePrewarmPolicy.shouldPrewarm(threeGb.copy(totalRamMb = 1_950), emptyList()))
+    }
 }

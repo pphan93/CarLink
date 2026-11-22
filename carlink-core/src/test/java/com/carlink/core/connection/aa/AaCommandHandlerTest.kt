@@ -83,8 +83,10 @@ class AaCommandHandlerTest {
             plainPhone = phoneAfterReset
             if (phoneAfterReset != null) accessory = false // back in its normal USB mode
             offBusUntil = clock + offBusAfterReset
+            if (resetFailures > 0) { resetFailures--; return false }
             return resetWorks
         }
+        var resetFailures = 0
         var resetWorks = true
         var offBusAfterReset = 0L
         private var offBusUntil = 0L
@@ -97,6 +99,8 @@ class AaCommandHandlerTest {
         override fun accessoryDevice(): UsbDevice? = accessoryOnBus?.takeIf { clock >= offBusUntil }
         var usbOnly: Boolean? = null
         override fun setUsbOnlySession(usbOnly: Boolean) { this.usbOnly = usbOnly }
+        var keepGroup = false
+        override fun setKeepGroupOnStop(keep: Boolean) { keepGroup = keep }
         override fun sleep(millis: Long) { clock += millis }
         override fun now() = clock
     }
@@ -246,6 +250,17 @@ class AaCommandHandlerTest {
         assertEquals(listOf<Boolean?>(null), blindAcks)
     }
 
+    @Test fun aStopForARestartLeavesTheEnginesGroupUpUntilTheNextStart() {
+        engine.running = true
+        engine.group = P2pGroupReading(true, "DIRECT-K7-CarLink", true)
+        handler.stop(5L, keepGroup = true)
+        assertTrue("the engine is told to keep its group", engine.keepGroup)
+        assertEquals(0, engine.removals)
+        assertEquals(Triple(5L, true, null as Boolean?), acks.single())
+        handler.startWireless(phone, VehicleProfile.GENERIC)
+        assertFalse("the next start clears it, so a later exit removes the group", engine.keepGroup)
+    }
+
     @Test fun aServiceThatWillNotStopIsReported() {
         engine.running = true
         engine.stopsWork = false
@@ -266,6 +281,26 @@ class AaCommandHandlerTest {
         handler.startUsb(device(), null, VehicleProfile.GENERIC)
         assertEquals(1, engine.resets)
         assertFalse(AapService.ACTION_CHECK_USB in actions()) // no doomed handshake on the old stream
+        assertEquals(1, engine.switched)
+    }
+
+    @Test fun aRestartWithoutTheAttachStillResetsAStaleAccessory() {
+        engine.accessory = true
+        engine.accessoryOnBus = device()
+        engine.phoneAfterReset = device()
+        handler.startUsb(null, null, VehicleProfile.GENERIC)
+        assertEquals(1, engine.resets)
+        assertFalse(AapService.ACTION_CHECK_USB in actions())
+        assertEquals(1, engine.switched)
+    }
+
+    @Test fun aResetRefusedRightAfterAStopIsTriedAgain() { // size change, tablet 2026-11-11
+        engine.accessory = true
+        engine.phoneAfterReset = device()
+        engine.resetFailures = 1
+        handler.startUsb(device(), null, VehicleProfile.GENERIC)
+        assertEquals(2, engine.resets)
+        assertTrue(events.any { it.second == "result=reset=true;device=Pixel" })
         assertEquals(1, engine.switched)
     }
 

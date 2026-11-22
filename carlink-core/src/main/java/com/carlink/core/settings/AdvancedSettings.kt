@@ -2,6 +2,7 @@ package com.carlink.core.settings
 
 import android.content.Context
 import android.os.Bundle
+import com.andrerinas.openheadunit.connection.QuickReconnectPolicy
 import com.carlink.core.core.Engine
 import com.carlink.core.engine.AndroidAutoSettings
 import com.shilapi.xcertplay.AirPlayPersistence
@@ -152,15 +153,6 @@ object AdvancedSettings {
             "Navigation audio stream", "Channel used for CarPlay directions.",
             Applies.NEXT_CONNECTION, carPlayIntChoice(audioStreams, AirPlayPersistence::loadNavigationAudioChannel,
                 AirPlayPersistence::saveNavigationAudioChannel)),
-        AdvancedSetting("cp_buffer", Engine.CARPLAY, SettingsCategory.SOUND, Tier.ADVANCED,
-            "Music buffer", "A longer buffer rides out Wi-Fi hiccups but adds delay.",
-            Applies.NEXT_CONNECTION, carPlayIntChoice(options(300 to "Short (300 ms)", 500 to "Medium (500 ms)", 1000 to "Long (1 s)"),
-                // DiPlay 0.2.19 keeps separate wired and wireless buffers; this one setting sets both.
-                { c -> AirPlayPersistence.loadMediaBufferMillis(c, wireless = true) },
-                { c, v ->
-                    AirPlayPersistence.saveMediaBufferMillis(c, wireless = true, millis = v)
-                    AirPlayPersistence.saveMediaBufferMillis(c, wireless = false, millis = v)
-                })),
         AdvancedSetting("cp_focus", Engine.CARPLAY, SettingsCategory.SOUND, Tier.ADVANCED,
             "Take audio focus", "Pause the car's own audio while CarPlay plays.",
             Applies.NEXT_CONNECTION, carPlayToggle(AirPlayPersistence::loadAudioFocusEnabled, AirPlayPersistence::saveAudioFocusEnabled)),
@@ -254,15 +246,7 @@ object AdvancedSettings {
         AdvancedSetting("aa_playback_focus", Engine.ANDROID_AUTO, SettingsCategory.SOUND, Tier.ADVANCED,
             "Pause other audio", "Whether the car's own audio pauses while Android Auto plays.",
             Applies.NEXT_CONNECTION, aaIntChoice("playback-focus-mode", 0, options(0 to "Automatic", 1 to "Always", 2 to "Never"))),
-        AdvancedSetting("aa_media_gain", Engine.ANDROID_AUTO, SettingsCategory.SOUND, Tier.ADVANCED,
-            "Music volume", "Adjust Android Auto music against other sources.",
-            Applies.NOW, aaIntChoice("media-volume-offset", 0, options(-50 to "−50 %", -25 to "−25 %", 0 to "Normal", 25 to "+25 %", 50 to "+50 %"))),
-        AdvancedSetting("aa_nav_gain", Engine.ANDROID_AUTO, SettingsCategory.SOUND, Tier.ADVANCED,
-            "Directions volume", "Adjust spoken directions against music.",
-            Applies.NOW, aaIntChoice("navigation-volume-offset", 0, options(-50 to "−50 %", -25 to "−25 %", 0 to "Normal", 25 to "+25 %", 50 to "+50 %"))),
-        AdvancedSetting("aa_assistant_gain", Engine.ANDROID_AUTO, SettingsCategory.SOUND, Tier.ADVANCED,
-            "Assistant volume", "Adjust Google Assistant against music.",
-            Applies.NOW, aaIntChoice("assistant-volume-offset", 0, options(-50 to "−50 %", -25 to "−25 %", 0 to "Normal", 25 to "+25 %", 50 to "+50 %"))),
+        // Music, directions and Assistant volume are CarLink's Sound levels (UnifiedSettings), written each session.
         AdvancedSetting("aa_mic_source", Engine.ANDROID_AUTO, SettingsCategory.SOUND, Tier.ADVANCED,
             "Microphone", "Which microphone Android Auto listens with.",
             Applies.NOW, aaIntChoice("mic-input-source", 0, options(0 to "Automatic", 1 to "Raw microphone", 2 to "Voice recognition",
@@ -273,6 +257,9 @@ object AdvancedSettings {
         AdvancedSetting("aa_mic_ns", Engine.ANDROID_AUTO, SettingsCategory.SOUND, Tier.ADVANCED,
             "Microphone noise suppression", "Reduce road noise in your voice.",
             Applies.NOW, aaToggle("mic-noise-suppressor", false)),
+        AdvancedSetting("aa_mic_agc", Engine.ANDROID_AUTO, SettingsCategory.SOUND, Tier.ADVANCED,
+            "Microphone automatic gain", "Let the head unit even out how loud your voice is.",
+            Applies.NOW, aaToggle("mic-auto-gain-control", false)),
         AdvancedSetting("aa_aac", Engine.ANDROID_AUTO, SettingsCategory.SOUND, Tier.LAB,
             "AAC audio", "Compressed audio instead of raw PCM.",
             Applies.NEXT_CONNECTION, aaToggle("use-aac-audio", false)),
@@ -290,6 +277,9 @@ object AdvancedSettings {
         AdvancedSetting("aa_p2p_24", Engine.ANDROID_AUTO, SettingsCategory.CONNECTION, Tier.LAB,
             "Force Wi-Fi Direct onto 2.4 GHz", "For head units whose 5 GHz Wi-Fi Direct is unreliable.",
             Applies.NEXT_CONNECTION, aaToggle("debug-force-p2p-band-24", false)),
+        AdvancedSetting("aa_quick_reconnect", Engine.ANDROID_AUTO, SettingsCategory.CONNECTION, Tier.LAB,
+            "Quick wireless reconnect", "After a Wi-Fi drop, offer the network again over the phone's open Bluetooth link.",
+            Applies.NEXT_CONNECTION, aaToggle(QuickReconnectPolicy.HOST_KEY, false)),
         AdvancedSetting("aa_fps_counter", Engine.ANDROID_AUTO, SettingsCategory.GENERAL, Tier.LAB,
             "Show frame counter", "Overlay the Android Auto frame rate.", Applies.NOW, aaToggle("show-fps-counter", false)),
         AdvancedSetting("aa_low_latency", Engine.ANDROID_AUTO, SettingsCategory.GENERAL, Tier.LAB,

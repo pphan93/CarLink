@@ -28,7 +28,6 @@ import com.shilapi.xcertplay.hud.BydBluetoothSuspend
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -1074,7 +1073,9 @@ private class VideoDecoder(
         runCatching { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DISPLAY) }
         try {
             while (running) {
-                val job = queue.poll(5)
+                // CarLink: 5 ms only while a frame is inside the decoder and this loop drains it; otherwise
+                // wake at most every 50 ms (200 wakeups a second on a still screen before, low-end round 5).
+                val job = queue.poll(if (outputThread == null && framesInDecoder > 0) 5L else IDLE_POLL_MILLIS)
                 outputFailure?.let { failure ->
                     outputFailure = null
                     onJobFailure("output", failure)
@@ -1581,6 +1582,7 @@ private class VideoDecoder(
                 queuedSlot = (queuedSlot + 1) % queuedPresentationUs.size
             }
             codec.queueInputBuffer(index, 0, annexB.size, presentationUs, 0)
+            framesInDecoder++ // CarLink
             referenceChain.onQueued()
         } else {
             inputSizeOverflowed = true // CarLink: the recreated decoder asks for the full 8 MB from now on
@@ -1589,6 +1591,9 @@ private class VideoDecoder(
         }
         if (outputThread == null) drainOutput(codec)
     }
+
+    /** CarLink: frames queued to the decoder and not yet out; the video loop polls fast only while some are. */
+    @Volatile private var framesInDecoder = 0
 
     /** CarLink: a frame did not fit the picture-sized input buffer; this sink asks for [MAX_INPUT_SIZE] again. */
     @Volatile private var inputSizeOverflowed = false
@@ -1627,6 +1632,7 @@ private class VideoDecoder(
             index == MediaCodec.INFO_TRY_AGAIN_LATER -> return false
             index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> logOutputFormat(codec.outputFormat)
             index >= 0 -> {
+                if (framesInDecoder > 0) framesInDecoder-- // CarLink
                 val render = outputSurface != null
                 // Parked output goes to the offscreen consumer: it keeps the codec's state, but it is
                 // not shown, so it is neither paced nor counted.
@@ -1702,10 +1708,13 @@ private class VideoDecoder(
     // Worker only; [outputLock] orders it against the output thread.
     private fun releaseDecoder() {
         backlogRecovery.reset()
+        framesInDecoder = 0 // CarLink
         val codec: MediaCodec?
         synchronized(outputLock) {
             codec = decoder
             decoder = null
+            // A failure reported for this codec must not retire its replacement.
+            outputFailure = null
             // The output thread returns from dequeueOutputBuffer within its timeout and then sees no codec.
             awaitNotDequeuing(codec)
         }
@@ -1753,6 +1762,8 @@ private class VideoDecoder(
     private companion object {
         const val TAG = "xcertplay-usb"
         const val MAX_INPUT_SIZE = 8 * 1024 * 1024
+        /** CarLink: the video loop's wait with nothing in the decoder (stats and keyframe requests still run). */
+        const val IDLE_POLL_MILLIS = 50L
         // The output thread's wait for a decoded frame; a release waits at most this long for it to return.
         const val OUTPUT_TIMEOUT_US = 10_000L
         const val OUTPUT_IDLE_WAIT_MS = 10L
@@ -1819,10 +1830,13 @@ private class AudioRenderer(
     private var mappedChannel: AudioChannel? = null
     private val navigationPlaybackToken = NavigationPlayback.open()
     private var actualLegacyStreamType: Int? = null
-    private val queue = LinkedBlockingQueue<AudioPacket>(MAX_QUEUED_PACKETS)
+    private val queue = RtpReorderQueue<AudioPacket>(MAX_QUEUED_PACKETS,
+        { RtpReorderQueue.rtpSequence(it.rtp) }, AudioPacket::sample)
     /** Music with sustained decoder backpressure must not keep playing minutes-old packets. */
     private val mediaLagGuard = if (format.audioType == "media") MediaPacketLagGuard(format.rtpClockRate) else null
+    // The newest RTP time that arrived; a reordered, late or duplicate packet does not move it back.
     @Volatile private var newestRtpSample = 0
+    private var newestRtpSampleKnown = false
     private var lagRecoveryReports = 0
     // CarLink: upstream PR #1206 (lost music fill)
     private val lostMusicFill = if (format.audioType == "media") LostMusicFill(format.sampleRate) else null
@@ -1835,6 +1849,7 @@ private class AudioRenderer(
     private var track: AudioTrack? = null
     @Volatile private var navigationAttenuationDb = 0
     private var appliedNavigationAttenuationDb: Int? = null
+    private var levelChannel = "" // CarLink: HostAudio.playbackPcm
     private var pcm = ByteArray(64 * 1024)
     private var playbackStarted = false
     private var prebufferBytes = 0
@@ -1853,6 +1868,10 @@ private class AudioRenderer(
     private val packetsReceived = AtomicInteger()
     private val packetsDropped = AtomicInteger()
     private val packetsDroppedTotal = AtomicInteger()
+    private val packetsReordered = AtomicInteger()
+    private val packetsReorderedTotal = AtomicInteger()
+    private val packetsLateDropped = AtomicInteger()
+    private val packetsLateDroppedTotal = AtomicInteger()
     private val lastArrivalNs = AtomicLong()
     private val maxArrivalGapMs = AtomicLong()
     private val frameBytes = if (format.channels >= 2) 4 else 2
@@ -1891,6 +1910,8 @@ private class AudioRenderer(
     private val thread = Thread(::run, "carplay-audio").apply { isDaemon = true }
 
     fun start() {
+        queue.restartSequence()
+        newestRtpSampleKnown = false // CarLink: a restarted stream must not keep the old newest RTP time for the lag guard
         if (started) return
         started = true
         thread.start()
@@ -1902,10 +1923,15 @@ private class AudioRenderer(
             packetsReceived.incrementAndGet()
             val previous = lastArrivalNs.getAndSet(now)
             if (previous != 0L) maxArrivalGapMs.accumulateAndGet((now - previous) / 1_000_000L, ::maxOf)
-            newestRtpSample = sample
+            val ahead = sample - newestRtpSample
+            // A jump further back than reordering explains is a new run of the stream.
+            if (!newestRtpSampleKnown || ahead > 0 || ahead < -NEWEST_RTP_RESTART_FRAMES) {
+                newestRtpSample = sample
+                newestRtpSampleKnown = true
+            }
             // Hold short Wi-Fi bursts intact. If compressed audio remains >1.5s behind for
             // another 1.5s, skip only stale undecoded packets to catch up to the live song.
-            val removed = mediaLagGuard?.recover(queue, sample, AudioPacket::sample, now) ?: 0
+            val removed = mediaLagGuard?.recover(queue, newestRtpSample, AudioPacket::sample, now) ?: 0
             if (removed > 0) {
                 packetsDropped.addAndGet(removed)
                 packetsDroppedTotal.addAndGet(removed)
@@ -1916,17 +1942,27 @@ private class AudioRenderer(
                 }
             }
         }
-        if (!started || !queue.offer(AudioPacket(rtp, sample, now).apply { afterLoss = followsLoss(rtp) })) { // CarLink: #1206
-            if (started) {
+        if (!started) return
+        when (queue.insert(AudioPacket(rtp, sample, now).apply { afterLoss = followsLoss(rtp) })) { // CarLink: #1206
+            RtpReorderQueue.Placement.APPENDED -> Unit
+            RtpReorderQueue.Placement.REORDERED -> {
+                packetsReordered.incrementAndGet()
+                packetsReorderedTotal.incrementAndGet()
+            }
+            RtpReorderQueue.Placement.LATE -> {
+                packetsLateDropped.incrementAndGet()
+                packetsLateDroppedTotal.incrementAndGet()
+            }
+            RtpReorderQueue.Placement.FULL -> {
                 packetsDropped.incrementAndGet()
                 packetsDroppedTotal.incrementAndGet()
-            }
-            if (started && !droppedPacketsLogged) {
-                droppedPacketsLogged = true
-                Log.w(TAG, "audio queue full; dropping newest packets to bound latency")
-                if (queueFullReportCount < MAX_QUEUE_FULL_REPORTS) {
-                    queueFullReportCount++
-                    report("Audio: queue full audioType=${format.audioType} count=$queueFullReportCount")
+                if (!droppedPacketsLogged) {
+                    droppedPacketsLogged = true
+                    Log.w(TAG, "audio queue full; dropping newest packets to bound latency")
+                    if (queueFullReportCount < MAX_QUEUE_FULL_REPORTS) {
+                        queueFullReportCount++
+                        report("Audio: queue full audioType=${format.audioType} count=$queueFullReportCount")
+                    }
                 }
             }
         }
@@ -2200,7 +2236,8 @@ private class AudioRenderer(
             payloadType = format.payloadType,
             mode = mode,
         )
-        return if (speakerphoneCall) AudioChannelMapper.playCallOnSpeaker(selection) else selection
+        levelChannel = selection.channel.name // CarLink: the level follows the stream's own kind
+        return if (speakerphoneCall || HostAudio.callsAsMedia) AudioChannelMapper.playCallOnSpeaker(selection) else selection // CarLink: callsAsMedia
     }
 
     private fun audioAttributesFor(selection: AudioChannelSelection): AudioAttributes =
@@ -2477,6 +2514,7 @@ private class AudioRenderer(
         voiceFilter?.process(data, offset, length)
         applyNavigationAttenuation()
         attenuateNavigation(data, offset, length)
+        HostAudio.playbackPcm?.invoke(levelChannel, data, offset, length) // CarLink
         if (!fadeApplied) {
             applyFadeIn(data, offset, length)
             fadeApplied = true
@@ -2571,7 +2609,8 @@ private class AudioRenderer(
             ?: 0L
         val compressedPcmFrames = compressedRtpFrames * format.sampleRate /
             format.rtpClockRate.coerceAtLeast(1)
-        val dropped = packetsDroppedTotal.get() + inputDropped
+        // A late packet dropped by the reorder queue leaves a gap too, which must not read as a fast clock.
+        val dropped = packetsDroppedTotal.get() + packetsLateDroppedTotal.get() + inputDropped
         if (dropped != droppedAtLastTrim) {
             droppedAtLastTrim = dropped
             trim.measureAgain()
@@ -2661,7 +2700,8 @@ private class AudioRenderer(
             "sampleRate=${currentTrack?.sampleRate ?: format.sampleRate} " +
             "trackBufferFrames=${currentTrack?.bufferSizeInFrames ?: -1} " +
             "rx=${packetsReceived.getAndSet(0)} " +
-            "dropped=${packetsDropped.getAndSet(0)} underruns=+${underruns - statsLastUnderruns} queue=${queue.size} " +
+            "dropped=${packetsDropped.getAndSet(0)} reordered=${packetsReordered.getAndSet(0)} " +
+            "lateDropped=${packetsLateDropped.getAndSet(0)} underruns=+${underruns - statsLastUnderruns} queue=${queue.size} " +
             "playing=$playbackStarted maxGapMs=${maxArrivalGapMs.getAndSet(0)} " +
             "sinceRxMs=${if (lastRx == 0L) -1 else (now - lastRx) / 1_000_000L} maxWriteMs=$maxWriteMs " +
             "writtenFrames=$writtenFramesThisWindow totalWrittenFrames=$totalWrittenFrames " +
@@ -2678,7 +2718,8 @@ private class AudioRenderer(
             val decoderLine = "Audio: decoder stats audioType=${format.audioType} codec=${format.codec} " +
                 "inputQueuedTotal=$inputQueued inputDroppedTotal=$inputDropped " +
                 "shortOpusPacketsTotal=$shortOpusPackets decoderUnavailablePacketsTotal=$decoderUnavailablePackets " +
-                "outputBuffersTotal=$outputBuffers " +
+                "outputBuffersTotal=$outputBuffers reorderedTotal=${packetsReorderedTotal.get()} " +
+                "lateDroppedTotal=${packetsLateDroppedTotal.get()} " +
                 (if (lostMusicFill != null) "lostFramesFilledTotal=$lostFramesFilled " else "") + "ended=$force"
             Log.i(STATS_TAG, decoderLine)
             runCatching { report(decoderLine) }
@@ -2774,6 +2815,8 @@ private class AudioRenderer(
         const val BUFFER_TAIL_WAIT_NS = 500_000_000L
         // Holds a burst after a Wi-Fi gap (~4 s of AAC) instead of dropping it.
         const val MAX_QUEUED_PACKETS = 192
+        // RtpReorderQueue.MAX_REORDER_PACKETS packets of 1024-frame AAC.
+        const val NEWEST_RTP_RESTART_FRAMES = RtpReorderQueue.MAX_REORDER_PACKETS * 1024
         const val PREBUFFER_WRITE_CHUNK_BYTES = 2 * 1024
         const val STATS_TAG = "DiPlay-AudioStats"
         const val STATS_WINDOW_NS = 5_000_000_000L

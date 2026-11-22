@@ -1,6 +1,8 @@
 package com.carlink.core.connection
 
 import android.content.Context
+import com.carlink.core.settings.AudioDelay
+import com.carlink.core.settings.AudioLevels
 import com.carlink.core.settings.DayNight
 import com.carlink.core.settings.InterfaceSize
 import com.carlink.core.settings.Picture
@@ -15,6 +17,8 @@ import com.shilapi.xcertplay.CarPlayHostIntegration
 import com.shilapi.xcertplay.CarPlayNightMode
 import com.shilapi.xcertplay.CarPlayNightSchedule
 import com.shilapi.xcertplay.hud.BydOemClusterHold
+import com.shilapi.xcertplay.media.MediaAudioBuffer
+import com.shilapi.xcertplay.media.HostAudio
 import com.shilapi.xcertplay.hud.BydOutputSettings
 import com.shilapi.xcertplay.network.CarHotspotSettings
 import com.shilapi.xcertplay.orchestration.ManualHotspotValidation
@@ -44,6 +48,9 @@ data class CarPlayEngineSettings(
     val appearanceKey: String = AppAppearance.DARK.key,
     val rightHandDrive: Boolean,
     val carBluetoothAudio: Boolean,
+    /** DiPlay's music buffer per transport, from [AudioDelay] (`MediaAudioBuffer` presets). */
+    val wiredMediaBufferMillis: Int = MediaAudioBuffer.DEFAULT_MILLIS,
+    val wirelessMediaBufferMillis: Int = MediaAudioBuffer.DEFAULT_MILLIS,
     /** iAP2 location; only with the permission, so the host never asks before a start (F17). */
     val locationReporting: Boolean,
     /** Mirrored as they are, so DiPlay never keeps details CarLink no longer has (F17). */
@@ -54,6 +61,14 @@ data class CarPlayEngineSettings(
     val wheelKeyRemap: Map<Int, Int> = emptyMap(),
     /** DiPlay answers and ends CarPlay calls with the call keys (`BydOutputSettings.carPlayCallControls`). */
     val callKeys: Boolean = false,
+    /** Levels in dB for DiPlay's media, navigation (and Siri) and call streams, and the call microphone. */
+    val mediaLevelDb: Int = 0,
+    val navigationLevelDb: Int = 0,
+    val callLevelDb: Int = 0,
+    val micGainDb: Int = 0,
+    /** Calls play as media (`HostAudio.callsAsMedia`, GitHub #32). */
+    val callAudioAsMedia: Boolean = false,
+    val resumeMusic: Boolean = false,
 )
 
 /** The vehicle-profile part of [CarPlayEngineSettings] (DIPLAY.md §12, F5). */
@@ -82,6 +97,9 @@ enum class CarLinkAppearance { FOLLOW_SYSTEM, DARK, LIGHT }
 
 /** Pure translation from CarLink's settings to DiPlay's, so every rule is unit tested. */
 object CarPlaySettingsPolicy {
+    /** Interface size Medium: the screen's long side told to the iPhone, in mm (Android Auto on a phone or tablet follows it). */
+    const val MEDIUM_WIDTH_MM = 300
+
     /**
      * CarLink's theme at the time of a write; the app sets it at start-up. The default, dark,
      * is DiPlay's own default, so a host that never sets it changes nothing.
@@ -89,8 +107,21 @@ object CarPlaySettingsPolicy {
     @Volatile
     var appearance: () -> CarLinkAppearance = { CarLinkAppearance.DARK }
 
+    /** "Resume music after reconnecting", as last written by [apply]; read at each first picture. */
+    @Volatile
+    var resumeMusic: Boolean = false
+        private set
+
     /** DiPlay's own default OEM label (AirPlayPersistence.DEFAULT_OEM_LABEL, DIPLAY.md §12 row 15). */
     const val DIPLAY_DEFAULT_OEM_LABEL = "BYD"
+
+    /** The screen width told to the iPhone for [size]; null leaves DiPlay's own (Custom). */
+    fun widthMm(size: InterfaceSize): Int? = when (size) {
+        InterfaceSize.SMALL -> 350
+        InterfaceSize.MEDIUM -> MEDIUM_WIDTH_MM
+        InterfaceSize.LARGE -> 220 // 250 looked too close to Medium on a tablet (2026-11-12)
+        InterfaceSize.CUSTOM -> null
+    }
 
     fun map(
         settings: UnifiedSettings,
@@ -110,12 +141,7 @@ object CarPlaySettingsPolicy {
             Picture.LIGHT -> 75 to 30
             Picture.CUSTOM -> null to null
         }
-        val widthMm = when (settings.interfaceSize) {
-            InterfaceSize.SMALL -> 350
-            InterfaceSize.MEDIUM -> 300
-            InterfaceSize.LARGE -> 250
-            InterfaceSize.CUSTOM -> null
-        }
+        val widthMm = widthMm(settings.interfaceSize)
         val byd = profile == VehicleProfile.BYD_DILINK
         return CarPlayEngineSettings(
             wirelessMode = when (path) {
@@ -147,6 +173,16 @@ object CarPlaySettingsPolicy {
             },
             rightHandDrive = settings.rightHandDrive,
             carBluetoothAudio = settings.soundThroughCarBluetooth,
+            // Wired USB has no radio gaps, so Low can go short; wireless keeps DiPlay's 300 ms floor.
+            wiredMediaBufferMillis = when (settings.audioDelay) {
+                AudioDelay.LOW -> 100
+                AudioDelay.NORMAL -> MediaAudioBuffer.DEFAULT_MILLIS
+                AudioDelay.HIGH -> 500
+            },
+            wirelessMediaBufferMillis = when (settings.audioDelay) {
+                AudioDelay.LOW, AudioDelay.NORMAL -> MediaAudioBuffer.DEFAULT_MILLIS
+                AudioDelay.HIGH -> MediaAudioBuffer.MOST_STABLE_MILLIS
+            },
             // F17: CarLink defaults this on, DiPlay off; without the permission the host would ask
             // before every start and save false, and CarLink would write true again.
             locationReporting = settings.sendCarLocation && fineLocationGranted,
@@ -163,6 +199,12 @@ object CarPlaySettingsPolicy {
             wheelKeyRemap = WheelKeys.remap(settings.wheelKeys),
             // Only CarLink sets it (no CarLink screen shows DiPlay's switch): on exactly when a call key is learned.
             callKeys = WheelKeys.needsCarPlayCallKeys(settings.wheelKeys),
+            mediaLevelDb = settings.mediaLevelDb,
+            navigationLevelDb = settings.navigationLevelDb,
+            callLevelDb = settings.callLevelDb,
+            micGainDb = settings.micGainDb,
+            callAudioAsMedia = settings.callAudioAsMedia,
+            resumeMusic = settings.resumeMusic,
         )
     }
 
@@ -184,6 +226,8 @@ object CarPlaySettingsPolicy {
         }
         AirPlayPersistence.saveRightHandDrive(context, values.rightHandDrive)
         AirPlayPersistence.saveCarBluetoothAudio(context, values.carBluetoothAudio)
+        AirPlayPersistence.saveMediaBufferMillis(context, wireless = true, millis = values.wirelessMediaBufferMillis)
+        AirPlayPersistence.saveMediaBufferMillis(context, wireless = false, millis = values.wiredMediaBufferMillis)
         AirPlayPersistence.saveLocationReportingEnabled(context, values.locationReporting)
 
         // Car hotspot: name, password and the security they imply. The band and channel are the
@@ -195,6 +239,11 @@ object CarPlaySettingsPolicy {
         AirPlayPersistence.saveExistingWifiCredentials(context, values.homeWifi.ssid, values.homeWifi.password)
 
         CarPlayHostIntegration.keyRemap = values.wheelKeyRemap
+        // Read by each new audio stream and microphone; null hooks leave DiPlay's audio untouched.
+        HostAudio.playbackPcm = AudioLevels.carPlayPlayback(values.mediaLevelDb, values.navigationLevelDb, values.callLevelDb)
+        HostAudio.microphonePcm = AudioLevels.pcmGain(values.micGainDb)
+        HostAudio.callsAsMedia = values.callAudioAsMedia
+        resumeMusic = values.resumeMusic
         if (BydOutputSettings.carPlayCallControls(context) != values.callKeys) {
             BydOutputSettings.setCarPlayCallControls(context, values.callKeys)
         }

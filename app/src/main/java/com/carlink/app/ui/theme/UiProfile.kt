@@ -24,5 +24,10 @@ object UiProfileDetector {
         UiProfileMode.AUTO -> if (looksLikeCarDisplay(context)) UiProfile.CAR else UiProfile.HANDHELD
     }
 
-    fun looksLikeCarDisplay(context: Context): Boolean = HeadUnitDetector.looksLikeCarDisplay(context)
+    /**
+     * By the hardware, not the system's car mode: Android Auto's engine turns car mode on (DiAuto
+     * AapService.setupCarMode) and leaves it on, which gave a tablet's switcher panel and Home the car
+     * layout, too big and cut off, from the first Android Auto session on (tablet, 2026-11-12).
+     */
+    fun looksLikeCarDisplay(context: Context): Boolean = HeadUnitDetector.looksLikeCarDisplay(context, trustCarMode = false)
 }

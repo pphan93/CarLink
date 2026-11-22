@@ -14,6 +14,7 @@ import com.carlink.app.ui.theme.UiProfileMode
 import com.carlink.core.core.Engine
 import com.carlink.core.settings.AdvancedSetting
 import com.carlink.core.settings.AdvancedSettings
+import com.carlink.core.settings.AudioDelay
 import com.carlink.core.settings.ConnectionMethod
 import com.carlink.core.settings.Control
 import com.carlink.core.settings.DayNight
@@ -59,6 +60,8 @@ data class SettingsUi(
     val stereoBluetoothFyt: Boolean = false,
     /** "CarPlay" / "Android Auto" while a session shows a picture: Settings offers the way back to it. */
     val liveEngine: String? = null,
+    /** Paired phones: Connection › "Forget and re-pair" offers them. */
+    val phones: List<com.carlink.core.detect.PairedPhone> = emptyList(),
 )
 
 /** What Settings can change; the ViewModel implements it, previews fake it. */
@@ -99,6 +102,12 @@ interface SettingsActions {
     suspend fun readSavedWifiPassword(ssid: String): String? = null
     /** Saves the car hotspot, and applies it to the car's own hotspot where Android allows it. */
     fun saveCarHotspot(details: com.carlink.core.settings.WifiDetails) = update { it.copy(carHotspot = details) }
+    /** "Forget and re-pair" (asked first): CarLink forgets [phone], then opens Bluetooth settings. */
+    fun forgetAndRepair(phone: com.carlink.core.detect.PairedPhone) {}
+    /** Back up: asks about Wi-Fi passwords, then where to save the file. */
+    fun backupSettings() {}
+    /** Restore: picks a file, checks it and asks before anything changes. */
+    fun restoreSettings() {}
 }
 
 /** Rail and grid order. */
@@ -154,7 +163,8 @@ internal val SettingsCategory.selectedIcon: Int
 /** The bottom sheets Settings opens; saved by [key] so a rotation keeps the sheet open. */
 internal enum class EssentialSheet {
     CONNECTION_METHOD, CAR_HOTSPOT, SAME_WIFI, PICTURE, INTERFACE_SIZE, DAY_NIGHT, NIGHT_START, NIGHT_END,
-    DRIVING_SIDE, SOUND, APPEARANCE, LAYOUT, CARLINK_SIZE, RENDERING, CAR_BRAND, WHEEL_KEYS,
+    DRIVING_SIDE, SOUND, AUDIO_DELAY, APPEARANCE, LAYOUT, CARLINK_SIZE, RENDERING, CAR_BRAND, WHEEL_KEYS,
+    MEDIA_LEVEL, NAVIGATION_LEVEL, CALL_LEVEL, CALL_STREAM, MIC_GAIN,
 }
 
 internal object SheetKey {
@@ -230,6 +240,15 @@ internal fun interfaceSizeLabel(size: InterfaceSize): String = stringResource(
         InterfaceSize.MEDIUM -> R.string.carlink_settings_size_medium
         InterfaceSize.LARGE -> R.string.carlink_settings_size_large
         InterfaceSize.CUSTOM -> R.string.carlink_settings_custom
+    },
+)
+
+@Composable
+internal fun audioDelayLabel(delay: AudioDelay): String = stringResource(
+    when (delay) {
+        AudioDelay.LOW -> R.string.carlink_settings_audio_delay_low
+        AudioDelay.NORMAL -> R.string.carlink_settings_audio_delay_normal
+        AudioDelay.HIGH -> R.string.carlink_settings_audio_delay_high
     },
 )
 

@@ -31,6 +31,9 @@ internal object AaProtocol {
     /** Android Auto on this screen: DiAuto's Self Mode against Android Auto's head unit server (127.0.0.1:5277). */
     const val COMMAND_START_SELF = "start_self"
     const val COMMAND_STOP = "stop"
+    /** Interface size now ([EXTRA_SIZE_PERCENT]); answered by [KIND_SIZE] `live=true|false`. */
+    const val COMMAND_SET_SIZE = "set_size"
+    const val EXTRA_SIZE_PERCENT = "size_percent"
     const val COMMAND_REPORT = "report"
     /** Wake the chosen phone again on an armed, idle engine (DiAuto's manual poke is a single 20 s hold). */
     const val COMMAND_POKE = "poke"
@@ -68,6 +71,8 @@ internal object AaProtocol {
     const val KIND_AOA_STALE = "CARLINK_AOA_STALE"
     /** The result of [COMMAND_RESWITCH_USB] (`result=true|false|busy|no-accessory`). */
     const val KIND_AOA_RESWITCH = "CARLINK_AOA_RESWITCH"
+    /** The answer to [COMMAND_SET_SIZE]: `live=true` when it applied without a reconnect. */
+    const val KIND_SIZE = "CARLINK_SIZE"
     /** What the receiver did with a wireless start ([WirelessStartDecision] name in the detail). */
     const val KIND_START_DECISION = "CARLINK_START_DECISION"
 
@@ -76,6 +81,8 @@ internal object AaProtocol {
     const val EXTRA_SERVICE_STOPPED = "service_stopped"
     /** True: no group of CarLink's is up; false: one is still up; absent: could not tell. */
     const val EXTRA_GROUP_RELEASED = "group_released"
+    /** On [COMMAND_STOP]: leave Android Auto's own Wi-Fi Direct group up for the restart that follows. */
+    const val EXTRA_KEEP_GROUP = "keep_group"
 
     /** CommManager.ConnectionState names, in session order. */
     const val CONNECTION_DISCONNECTED = "Disconnected"

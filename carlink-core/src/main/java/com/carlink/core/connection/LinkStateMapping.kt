@@ -19,8 +19,9 @@ fun SessionState.toLinkState(directVideoOutput: Boolean = true): LinkState = whe
         request.phoneName, 1, STEPS, notice = LinkNotice(LinkNoticeKind.TURNING_ON_HOTSPOT))
     else LinkState(LinkStage.FAILED, request.engine, request.shownTransport, request.phoneName,
         problem = problems.first().toLinkProblem())
+    // The step it failed on, so Home can name it (0 = unknown).
     is SessionState.Failed -> LinkState(LinkStage.FAILED, request.engine, request.shownTransport, request.phoneName,
-        detail = detail, problem = reason.toLinkProblem())
+        stage?.let(::stepOf) ?: 0, if (stage != null) STEPS else 0, detail = detail, problem = reason.toLinkProblem())
     is SessionState.Active -> activeLinkState().copy(notice = linkNotice(directVideoOutput))
 }
 

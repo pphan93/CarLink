@@ -78,6 +78,11 @@ import com.carlink.core.core.PhoneKind
 import com.carlink.core.core.Transport
 import com.carlink.core.detect.PairedPhone
 import com.carlink.core.settings.ConnectionMethod
+import com.carlink.core.settings.DayNight
+import com.carlink.app.ui.settings.dayNightIcon
+import com.carlink.app.ui.settings.dayNightLabel
+import androidx.compose.foundation.layout.fillMaxHeight
+import com.carlink.core.settings.InterfaceSize
 import com.carlink.core.settings.WirelessPath
 
 enum class SwitcherPage { MAIN, CONNECTION_TYPE }
@@ -100,6 +105,12 @@ data class SwitcherUi(
     val switchingTo: String? = null,
     /** The driver's connection type; used from the next connection. */
     val method: ConnectionMethod = ConnectionMethod.AUTOMATIC,
+    /** Interface size for both engines; changing it reconnects the session. */
+    val interfaceSize: InterfaceSize = InterfaceSize.MEDIUM,
+    /** Day/night for both engines; applies from the next connection. */
+    val dayNight: DayNight = DayNight.AUTOMATIC,
+    /** The screen dimmer's step (0 = off), an index into switcher/ScreenDimmer.ALPHAS. */
+    val dimmer: Int = 0,
     val page: SwitcherPage = SwitcherPage.MAIN,
     /** The edge the bubble rests on; the panel opens on the same side. */
     val edge: Edge = Edge.RIGHT,
@@ -113,9 +124,26 @@ interface SwitcherActions {
     fun openHome() {}
     fun showPage(page: SwitcherPage) {}
     fun setConnectionMethod(method: ConnectionMethod) {}
+    fun setInterfaceSize(size: InterfaceSize) {}
     fun disconnect() {}
     fun close() {}
+    /** Quick toggles: Day → Night → Automatic ([nextDayNight]). */
+    fun cycleDayNight() {}
+    /** Quick toggles: the screen dimmer, off → darker steps → off. */
+    fun cycleDimmer() {}
+    /** Quick toggles: the stereo's own launcher (Android's Home), the projection keeps running. */
+    fun openStereoLauncher() {}
 }
+
+/** The night-mode tile's cycle: Day, Night, Automatic; a schedule set in Settings goes on to Day. */
+fun nextDayNight(current: DayNight): DayNight = when (current) {
+    DayNight.DAY -> DayNight.NIGHT
+    DayNight.NIGHT -> DayNight.AUTOMATIC
+    DayNight.AUTOMATIC, DayNight.SCHEDULE -> DayNight.DAY
+}
+
+/** The dimmer tile's cycle over [steps] levels (0 = off). */
+fun nextDimLevel(current: Int, steps: Int): Int = (current + 1).mod(steps)
 
 /** The bubble: a round glass button with the CarLink mark. Fading is done by its window. */
 @Composable
@@ -225,6 +253,9 @@ private fun MainPage(ui: SwitcherUi, actions: SwitcherActions) {
         RoundGlassButton(R.drawable.carlink_ic_close, stringResource(R.string.carlink_switcher_close), actions::close)
     }
 
+    Spacer(Modifier.height(dimens.gutter))
+    QuickToggles(ui, actions, enabled = !switching)
+
     Spacer(Modifier.height(dimens.gutter * 1.25f))
     Eyebrow(stringResource(R.string.carlink_switcher_switch_title))
     Spacer(Modifier.height(10.dp))
@@ -265,6 +296,27 @@ private fun MainPage(ui: SwitcherUi, actions: SwitcherActions) {
     }
 
     Spacer(Modifier.height(dimens.gutter))
+    // A picture too big or too small for this screen: one tap here instead of Settings > Display.
+    Eyebrow(stringResource(R.string.carlink_settings_interface_size))
+    Spacer(Modifier.height(10.dp))
+    Row(Modifier.alpha(if (switching) 0.5f else 1f), horizontalArrangement = Arrangement.spacedBy(dimens.targetGap)) {
+        listOf(InterfaceSize.SMALL, InterfaceSize.MEDIUM, InterfaceSize.LARGE).forEach { size ->
+            val selected = size == ui.interfaceSize
+            SelectableGlass(selected, { if (!switching && !selected) actions.setInterfaceSize(size) }, Modifier.weight(1f),
+                role = Role.RadioButton) {
+                Box(Modifier.fillMaxWidth().defaultMinSize(minHeight = dimens.minTouch).padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center) {
+                    Text(com.carlink.app.ui.settings.interfaceSizeLabel(size), style = MaterialTheme.typography.titleSmall,
+                        color = if (selected) scheme.primary else scheme.onSurface, maxLines = 1)
+                }
+            }
+        }
+    }
+    Spacer(Modifier.height(6.dp))
+    Text(stringResource(R.string.carlink_switcher_size_reconnects), style = MaterialTheme.typography.bodySmall,
+        color = scheme.onSurfaceVariant)
+
+    Spacer(Modifier.height(dimens.gutter))
     val home = @Composable { m: Modifier ->
         GlassButton(stringResource(R.string.carlink_switcher_home), { if (!switching) actions.openHome() }, m,
             icon = R.drawable.carlink_ic_home)
@@ -283,6 +335,48 @@ private fun MainPage(ui: SwitcherUi, actions: SwitcherActions) {
         Row(horizontalArrangement = Arrangement.spacedBy(dimens.targetGap)) {
             home(Modifier.weight(1f))
             disconnect(Modifier.weight(1f))
+        }
+    }
+}
+
+/**
+ * One compact row of three tiles: night mode (cycles, from the next connection), the screen
+ * dimmer (cycles, at once) and the stereo's own launcher.
+ */
+@Composable
+private fun QuickToggles(ui: SwitcherUi, actions: SwitcherActions, enabled: Boolean) {
+    val dimens = CarLinkTokens.dimens
+    Row(Modifier.alpha(if (enabled) 1f else 0.5f).height(androidx.compose.foundation.layout.IntrinsicSize.Min),
+        horizontalArrangement = Arrangement.spacedBy(dimens.targetGap)) {
+        QuickTile(dayNightIcon(ui.dayNight), stringResource(R.string.carlink_switcher_night),
+            dayNightLabel(ui.dayNight), active = ui.dayNight != DayNight.AUTOMATIC, { if (enabled) actions.cycleDayNight() },
+            Modifier.weight(1f))
+        QuickTile(R.drawable.carlink_ic_display_settings, stringResource(R.string.carlink_switcher_dimmer),
+            if (ui.dimmer == 0) stringResource(R.string.carlink_switcher_dimmer_off)
+            else stringResource(R.string.carlink_switcher_dimmer_level, ui.dimmer), active = ui.dimmer > 0,
+            { if (enabled) actions.cycleDimmer() }, Modifier.weight(1f))
+        QuickTile(R.drawable.carlink_ic_home, stringResource(R.string.carlink_switcher_stereo_home),
+            stringResource(R.string.carlink_switcher_stereo_home_value), active = false,
+            { if (enabled) actions.openStereoLauncher() }, Modifier.weight(1f))
+    }
+    Spacer(Modifier.height(6.dp))
+    Text(stringResource(R.string.carlink_switcher_night_next), style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@Composable
+private fun QuickTile(icon: Int, label: String, value: String, active: Boolean, onClick: () -> Unit, modifier: Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    val dimens = CarLinkTokens.dimens
+    SelectableGlass(active, onClick, modifier.fillMaxHeight(), role = Role.Button) {
+        Column(Modifier.fillMaxWidth().defaultMinSize(minHeight = dimens.minTouch).padding(horizontal = 8.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(painterResource(icon), null, Modifier.size(dimens.iconSecondary), tint = if (active) scheme.primary else scheme.onSurface)
+            Spacer(Modifier.height(4.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant, maxLines = 1,
+                overflow = TextOverflow.Ellipsis)
+            Text(value, style = MaterialTheme.typography.titleSmall, color = if (active) scheme.primary else scheme.onSurface,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

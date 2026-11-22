@@ -768,6 +768,7 @@ open class CarPlayHostActivity : ComponentActivity() {
             finish()
         }
         override fun retryNow(): Boolean = manualRetry()
+        override fun setInterfaceSizeLive(widthMm: Int): Boolean = applyInterfaceSize(widthMm)
     }
     private val airPlayCommandExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val logLines = ArrayDeque<LogEntry>()
@@ -5121,15 +5122,24 @@ open class CarPlayHostActivity : ComponentActivity() {
             } else null
         }
         val longPixels = maxOf(display.widthPixels, display.heightPixels)
-        val square = if (CarPlayRotation.enabled(this) && !inSplitScreen) {
+        // CarLink: a saved custom safe area means a fixed screen fitted to its bezel; the square has no room for it (#65).
+        val square = if (CarPlayRotation.enabled(this) && !inSplitScreen &&
+            AirPlayPersistence.loadSafeAreaRect(this, size.width, size.height) == null) {
             CarPlayRotation.squareSide(longPixels, CarPlayRotation.picture(this), sessionHevc, hevcSoftwareDecoderEnabled)
         } else null
+        // CarLink: smaller whole-screen areas for live interface sizes; a custom safe area fits only the whole screen.
+        val sizeWidthsMm = if (AirPlayPersistence.loadSafeAreaRect(this, size.width, size.height) == null)
+            CarPlayHostIntegration.liveSizeWidthsMm else emptyList()
+        // CarLink: a turning screen connects at the widest size (Small) and starts on the chosen size's area,
+        // so every later size change is a live area switch, smaller ones included.
+        val liveBaseMm = if (square != null && sizeWidthsMm.isNotEmpty()) maxOf(sizeWidthsMm.max(), widthPhysicalMm) else widthPhysicalMm
         val canvas = if (square == null) display else {
             // The square is drawn across the screen's long side whatever its pixel count, so it reports that
             // side's real length: CarPlay then sizes its UI for the real screen, and a smaller square (the
             // smoother picture) only lowers the resolution, not the scale. It has no room for the custom
             // safe area.
-            val squareMm = if (display.widthPixels >= display.heightPixels) display.widthPhysicalMm else display.heightPhysicalMm
+            val squareMm = if (liveBaseMm != widthPhysicalMm) liveBaseMm // CarLink: see liveBaseMm
+                else if (display.widthPixels >= display.heightPixels) display.widthPhysicalMm else display.heightPhysicalMm
             display.copy(widthPixels = square, heightPixels = square, widthPhysicalMm = squareMm,
                 heightPhysicalMm = squareMm, viewArea = null, safeArea = null)
         }
@@ -5137,7 +5147,8 @@ open class CarPlayHostActivity : ComponentActivity() {
             CarPlayViewAreas.build(display.widthPixels, display.heightPixels, listOf(
                 CarPlayViewAreas.Screen(display.widthPixels, display.heightPixels, portrait = display.heightPixels > display.widthPixels),
             ), dock, splitWindow, startPortrait = display.heightPixels > display.widthPixels,
-                sidePanel = SidePanelSettings.enabled(this), rightHandDrive = rightHandDrive)
+                sidePanel = SidePanelSettings.enabled(this), rightHandDrive = rightHandDrive,
+                sizeWidthsMm = sizeWidthsMm, sessionWidthMm = widthPhysicalMm) // CarLink
         } else {
             val (landscape, portrait) = CarPlayRotation.turningAreas(square, size.width, size.height,
                 screen.widthPixels, screen.heightPixels)
@@ -5145,7 +5156,8 @@ open class CarPlayHostActivity : ComponentActivity() {
                 CarPlayViewAreas.Screen(landscape.first, landscape.second, portrait = false),
                 CarPlayViewAreas.Screen(portrait.first, portrait.second, portrait = true),
             ), dock, splitWindow, startPortrait = size.height > size.width, sidePanel = SidePanelSettings.enabled(this),
-                rightHandDrive = rightHandDrive)
+                rightHandDrive = rightHandDrive, sizeWidthsMm = sizeWidthsMm, sessionWidthMm = liveBaseMm) // CarLink
+                ?.also { areas -> areas.sizeVariant(widthPhysicalMm)?.let(areas::use) } // CarLink: start at the chosen size
         }
         pendingViewAreas = viewAreas
         val declared = if (viewAreas == null) canvas else canvas.copy(viewAreas = viewAreas.areas, initialViewArea = viewAreas.current)
@@ -6052,6 +6064,30 @@ open class CarPlayHostActivity : ComponentActivity() {
         return true
     }
 
+    /**
+     * CarLink: CarPlayHostIntegration.setInterfaceSizeLive; moves CarPlay to the whole-screen area that shows it
+     * as on a [widthMm] wide screen. False when this session has none or cannot switch now (the caller reconnects).
+     */
+    private fun applyInterfaceSize(widthMm: Int): Boolean {
+        val areas = sessionDisplay?.viewAreas
+        if (areas == null || controller == null || menuOpen || handshakeResetInProgress || shuttingDown.get() ||
+            pendingViewArea != null) {
+            Log.i(TAG, "Interface size ${widthMm} mm: no live change (areas=${areas != null} controller=${controller != null})")
+            return false
+        }
+        val target = areas.sizeVariant(widthMm)
+        val sent = target != null && (target == areas.current || controller?.showViewArea(target) == true)
+        if (sent && target != null) {
+            areas.use(target)
+            videoView?.let { updateVideoLayout(it.width, it.height) }
+        }
+        val message = "Interface size ${widthMm} mm (session ${areas.sessionWidthMm} mm): view area $target " +
+            "${target?.let { areas.areas[it] }} sent=$sent"
+        appendLog(message)
+        Log.i(TAG, message)
+        return sent
+    }
+
     /** CarLink: the view area a turn could not send yet; [retryViewArea] sends it once the session takes it. */
     private var pendingViewArea: Int? = null
 
@@ -6340,6 +6376,9 @@ open class CarPlayHostActivity : ComponentActivity() {
         if (shuttingDown.get() || menuOpen || handshakeResetInProgress) return
         val size = activeDisplaySize ?: return
         startupRetryBudget.disconnected()
+        // Every caller starts a new attempt, a display change or a switch to USB included, so the stop of the
+        // last one no longer holds: its failure must be shown and a lost session reconnected.
+        startupRetryStopped = false
         startupRetryButton?.visibility = View.GONE
         appendLog(reason)
         activeScreenStreamTypes.clear()

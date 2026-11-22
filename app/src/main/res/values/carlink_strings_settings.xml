@@ -137,6 +137,36 @@
     <string name="carlink_settings_sound_bluetooth">Through the car’s Bluetooth</string>
     <string name="carlink_settings_sound_carlink_detail">The head unit plays all sound. Recommended.</string>
     <string name="carlink_settings_sound_bluetooth_detail">Music goes through the car’s own Bluetooth audio instead.</string>
+    <string name="carlink_settings_audio_delay">CarPlay audio delay</string>
+    <string name="carlink_settings_audio_delay_detail">How far music and video sound is buffered behind the picture</string>
+    <string name="carlink_settings_audio_delay_low">Low</string>
+    <string name="carlink_settings_audio_delay_normal">Normal</string>
+    <string name="carlink_settings_audio_delay_high">High</string>
+    <string name="carlink_settings_audio_delay_low_detail">Sound closest to the picture: about 0.1 s over USB. Wireless stays at 0.3 s. Try Normal if music stutters.</string>
+    <string name="carlink_settings_audio_delay_normal_detail">About 0.3 s over USB and wireless. Recommended.</string>
+    <string name="carlink_settings_audio_delay_high_detail">Steadiest music on a weak link: about 0.5 s over USB, 1 s wireless.</string>
+    <string name="carlink_settings_group_levels">Levels</string>
+    <string name="carlink_settings_level_media">Media</string>
+    <string name="carlink_settings_level_media_detail">Music, podcasts and other media</string>
+    <string name="carlink_settings_level_navigation">Navigation</string>
+    <string name="carlink_settings_level_navigation_detail">Spoken directions and the voice assistant</string>
+    <string name="carlink_settings_level_calls">Calls</string>
+    <string name="carlink_settings_level_calls_detail">CarPlay calls. Android Auto calls go through the car’s Bluetooth hands-free.</string>
+    <string name="carlink_settings_level_sheet_body">Louder or quieter than the phone sends it, for both CarPlay and Android Auto. Above Normal, very loud passages can distort.</string>
+    <string name="carlink_settings_level_normal">Normal</string>
+    <string name="carlink_settings_level_db">%1$s dB</string>
+    <string name="carlink_settings_call_stream">Call audio plays as</string>
+    <string name="carlink_settings_call_stream_detail">How the head unit plays CarPlay calls</string>
+    <string name="carlink_settings_call_stream_phone">Phone call</string>
+    <string name="carlink_settings_call_stream_phone_detail">Recommended. The head unit treats it as a call and cancels the echo.</string>
+    <string name="carlink_settings_call_stream_media">Media</string>
+    <string name="carlink_settings_call_stream_media_detail">For head units that play calls too quietly or not at all. The other person may hear an echo: if so, turn on Call echo cancellation under Show advanced, or go back to Phone call.</string>
+    <string name="carlink_settings_resume_music">Resume music after reconnecting</string>
+    <string name="carlink_settings_resume_music_detail">If music was playing when the phone disconnected, press play once it is back</string>
+    <string name="carlink_settings_group_microphone">Microphone</string>
+    <string name="carlink_settings_mic_gain">Microphone level</string>
+    <string name="carlink_settings_mic_gain_detail">How loud your voice reaches calls and the voice assistant</string>
+    <string name="carlink_settings_mic_gain_sheet_body">Raise it if people say you sound far away; lower it if you sound distorted. Try it with Test call audio in Diagnostics.</string>
 
     <!-- Navigation -->
     <string name="carlink_settings_group_location">Location</string>
@@ -164,14 +194,14 @@
     <string name="carlink_settings_appearance_follow_detail">Dark at night, light by day</string>
     <string name="carlink_settings_appearance_dark_detail">Graphite, easiest at night</string>
     <string name="carlink_settings_appearance_light_detail">Warm light graphite</string>
-    <string name="carlink_settings_layout">Layout</string>
-    <string name="carlink_settings_layout_detail">Car-sized or phone-sized controls</string>
+    <string name="carlink_settings_layout">Screen type</string>
+    <string name="carlink_settings_layout_detail">Car stereo or phone/tablet: CarLink\'s layout and how CarPlay and Android Auto fit the screen</string>
     <string name="carlink_settings_layout_auto">Automatic</string>
-    <string name="carlink_settings_layout_car">Car</string>
+    <string name="carlink_settings_layout_car">Car stereo</string>
     <string name="carlink_settings_layout_handheld">Phone or tablet</string>
-    <string name="carlink_settings_layout_auto_detail">Picks the right size for this device</string>
-    <string name="carlink_settings_layout_car_detail">Large targets for a head unit</string>
-    <string name="carlink_settings_layout_handheld_detail">Standard Android sizes</string>
+    <string name="carlink_settings_layout_auto_detail">Detects this device. Choose by hand if CarPlay shows black bars or the picture turns when it shouldn\'t</string>
+    <string name="carlink_settings_layout_car_detail">A fixed screen in the car: large controls, the picture never turns</string>
+    <string name="carlink_settings_layout_handheld_detail">A phone or tablet as the screen: standard sizes, the picture turns with the screen</string>
     <string name="carlink_settings_rendering">Visual effects</string>
     <string name="carlink_settings_rendering_detail">Light, glow and animation on CarLink’s screens</string>
     <string name="carlink_settings_rendering_auto">Automatic</string>
@@ -258,4 +288,28 @@
     <string name="carlink_settings_aa_on_screen">Android Auto on this screen (experimental)</string>
     <string name="carlink_settings_aa_on_screen_unsupported">Not supported by Android Auto on this device: Google switches off its car mode on screens it does not support as phones (for example Samsung tablets). It works where Android Auto is installed as a system app, as on many Android head units.</string>
     <string name="carlink_settings_aa_on_screen_detail">Adds a Home button that runs Android Auto on this device itself, with no phone. Needs Android Auto 17.4 or newer with its head unit server started in Android Auto\'s developer settings; Home shows how.</string>
+    <!-- Settings › General › Back up and Restore (ui/settings/SettingsBackup.kt). -->
+    <string name="carlink_backup_action">Back up settings</string>
+    <string name="carlink_backup_detail">Save CarLink\'s settings to a file, to restore them later or on another screen</string>
+    <string name="carlink_restore_action">Restore settings</string>
+    <string name="carlink_restore_detail">Load settings from a backup file</string>
+    <string name="carlink_backup_passwords_title">Include Wi-Fi passwords?</string>
+    <string name="carlink_backup_passwords_body">Anyone who has the file can read it. The car hotspot and Same Wi-Fi passwords are left out unless you include them.</string>
+    <string name="carlink_backup_without_passwords">Without passwords</string>
+    <string name="carlink_backup_with_passwords">Include passwords</string>
+    <string name="carlink_backup_done">Settings backed up</string>
+    <string name="carlink_backup_failed">Could not save the backup</string>
+    <string name="carlink_restore_title">Restore settings?</string>
+    <string name="carlink_restore_body">CarLink\'s settings are replaced by the %1$s in this backup. Your phones and their pairing stay as they are.</string>
+    <string name="carlink_restore_body_dated">CarLink\'s settings are replaced by the %1$s in the backup from %2$s. Your phones and their pairing stay as they are.</string>
+    <string name="carlink_restore_passwords_kept">The backup has no Wi-Fi passwords: the ones saved here are kept.</string>
+    <plurals name="carlink_restore_count">
+        <item quantity="one">%d setting</item>
+        <item quantity="other">%d settings</item>
+    </plurals>
+    <string name="carlink_restore_confirm">Restore</string>
+    <string name="carlink_restore_done">Settings restored</string>
+    <string name="carlink_restore_error_title">This file can\'t be restored</string>
+    <string name="carlink_restore_error_body">It is not a CarLink settings backup, or it was changed (%1$s). Nothing was changed.</string>
+    <string name="carlink_restore_error_ok">OK</string>
 </resources>

@@ -249,9 +249,23 @@ class CarPlayAdapter internal constructor(
             // The default-grant wait counts from the iPhone's attach (UsbAttachTimes).
             com.shilapi.xcertplay.orchestration.CarPlayController.usbAttachAgeMillis =
                 { com.carlink.core.detect.UsbAttachTimes.ageMillis(it.deviceName) }
+            // A wired start with no session 8 s after the data paths gets one USB reset (DiPlay WiredStuckReset).
+            com.shilapi.xcertplay.orchestration.CarPlayController.resetWiredUsb = { UsbReset.reset(app, it) }
+            // Resume music after reconnecting (opt-in): the iPhone's play state, and play pressed after the first picture.
+            val resume = ResumeMusic(app.getSharedPreferences("carlink_resume_music", Context.MODE_PRIVATE), "carplay_playing")
+            com.shilapi.xcertplay.orchestration.CarPlayController.onPhonePlaying = { playing ->
+                if (playing == null) resume.onSessionEnded() else resume.onPhonePlaying(playing)
+            }
+            HostStates.add { state ->
+                if (state == HostState.FirstFrame) {
+                    resume.scheduleAfterFirstPicture(CarPlaySettingsPolicy.resumeMusic, CarPlayHostIntegration::pressPlay, TAG)
+                }
+            }
             // DiPlay's dial waits for CarLink's own page of the iPhone instead of racing its SDP.
             WirelessStartupTimeline.beforeBluetoothDial = BluetoothWarmup::awaitPage
             CarPlayWaitingView.install()
+            // Each session also declares the larger interface sizes as smaller areas, so the switcher changes size live.
+            CarPlayHostIntegration.liveSizeWidthsMm = com.carlink.core.settings.InterfaceSize.entries.mapNotNull(CarPlaySettingsPolicy::widthMm)
             // A screen that turns (phone, tablet) gets DiPlay's square canvas with a landscape and a
             // portrait area: turning switches area instead of rebuilding the session (10-50 s, 2026-11-10).
             // A head unit stays on the plain canvas, which is sharper and never turns.
@@ -369,6 +383,8 @@ internal class DiPlayEngineHooks(private val app: Context) : CarPlayEngineHooks 
     }
 
     override fun openHost(usbAttach: Intent?): Throwable? {
+        // Auto-rotate may have changed since install: the turning canvas follows it at each start (#33).
+        com.shilapi.xcertplay.CarPlayRotation.setEnabled(app, com.carlink.core.detect.HeadUnitDetector.handheld(app))
         val host = Intent(app, CarPlayHostActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
         // The host recognises a wired iPhone from the attach action and device extra and forces

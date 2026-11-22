@@ -384,6 +384,7 @@ class AapService : Service(), UsbReceiver.Listener {
         val isPlayingFromStatus = resolveIsPlayingFromStatus(status)
         lastAaPlaybackIsPlaying = isPlayingFromStatus
         mediaSessionIsPlaying = isPlayingFromStatus
+        if (status.hasState()) HostIntegration.onPhonePlaying?.invoke(isPlayingFromStatus) // CarLink
 
         if (!App.provide(this).settings.syncMediaSessionWithAaMetadata) return
         updateMediaSessionState(isPlayingFromStatus)
@@ -1225,14 +1226,12 @@ class AapService : Service(), UsbReceiver.Listener {
                 if (state.isUserExit) {
                     AppLog.i("AapService: Native AA user exit. Stopping handshake manager.")
                     nativeAaHandshakeManager?.stop()
+                } else if (nativeAaHandshakeManager?.beginQuickReconnect(state.isUserExit) == true) {
+                    // CarLink (quick reconnect): the held Bluetooth channel offers the network again;
+                    // it calls rearmNativeAfterDrop() itself if that does not land.
+                    AppLog.i("AapService: Native AA Mode disconnected. Quick reconnect on the held Bluetooth channel.")
                 } else {
-                    // Unexpected disconnect — reset and re-initialize for auto-reconnect.
-                    AppLog.i("AapService: Native AA Mode disconnected. Resetting manager and group in 1.5s...")
-                    nativeAaHandshakeManager?.stop()
-                    serviceScope.launch {
-                        delay(1500) // Give hardware time to settle before re-initializing P2P
-                        initWifiMode(force = true)
-                    }
+                    rearmNativeAfterDrop()
                 }
             }
 
@@ -1321,6 +1320,16 @@ class AapService : Service(), UsbReceiver.Listener {
         }
 
         scheduleReconnectIfNeeded(state)
+    }
+
+    /** Unexpected Native AA disconnect: reset and re-initialize for auto-reconnect. CarLink: a function so a failed quick reconnect can run it too. */
+    fun rearmNativeAfterDrop() {
+        AppLog.i("AapService: Native AA Mode disconnected. Resetting manager and group in 1.5s...")
+        nativeAaHandshakeManager?.stop()
+        serviceScope.launch {
+            delay(1500) // Give hardware time to settle before re-initializing P2P
+            initWifiMode(force = true)
+        }
     }
 
     /**
@@ -1936,13 +1945,23 @@ class AapService : Service(), UsbReceiver.Listener {
             checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
             try {
                 startForeground(1, createNotification(), types or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+                foregroundWithMicrophone = true
                 return
             } catch (e: SecurityException) {
+                // CarLink (open-headunit 66d22d81): a later start from the background is refused the type;
+                // re-claiming without it would take the microphone from a running call or Assistant.
+                if (foregroundWithMicrophone) {
+                    AppLog.i("AapService: later start refused the microphone type; keeping the running claim")
+                    return
+                }
                 AppLog.w("AapService: started without the microphone type: ${e.message}")
             }
         }
         startForeground(1, createNotification(), types)
     }
+
+    /** CarLink: this service already runs in the foreground with the microphone type. */
+    private var foregroundWithMicrophone = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         try {
