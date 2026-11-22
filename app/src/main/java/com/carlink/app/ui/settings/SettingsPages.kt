@@ -104,6 +104,13 @@ private fun ConnectionEssentials(ui: SettingsUi, actions: SettingsActions, openS
                 ui.unified.homeWifi.ssid.ifEmpty { stringResource(R.string.carlink_settings_not_set) },
                 { openSheet(SheetKey.of(EssentialSheet.SAME_WIFI)) },
                 description = stringResource(R.string.carlink_settings_same_wifi_detail), icon = R.drawable.carlink_ic_wifi)
+            // #87: Automatic never picks Same Wi-Fi, so only the explicit choice shows the cable option.
+            if (ui.unified.showAdvanced && method == ConnectionMethod.SAME_WIFI) {
+                GroupDivider()
+                SwitchRow(stringResource(R.string.carlink_settings_same_wifi_wired), ui.unified.sameWifiWired,
+                    { on -> actions.update { it.copy(sameWifiWired = on) } },
+                    description = stringResource(R.string.carlink_settings_same_wifi_wired_detail), icon = R.drawable.carlink_ic_wifi)
+            }
         }
         // Only where the probe found an external Bluetooth module: keep it across restarts (Home's chooser).
         if (ui.stereoBluetoothExternal) {
@@ -214,6 +221,10 @@ private fun SoundEssentials(ui: SettingsUi, actions: SettingsActions, openSheet:
         SwitchRow(stringResource(R.string.carlink_settings_resume_music), u.resumeMusic,
             { on -> actions.update { it.copy(resumeMusic = on) } },
             description = stringResource(R.string.carlink_settings_resume_music_detail), icon = R.drawable.carlink_ic_play_arrow)
+        GroupDivider()
+        SwitchRow(stringResource(R.string.carlink_settings_duck_directions), u.duckMusicForDirections,
+            { on -> actions.update { it.copy(duckMusicForDirections = on) } },
+            description = stringResource(R.string.carlink_settings_duck_directions_detail), icon = R.drawable.carlink_ic_navigation)
     }
     GlassGroup(header = { GroupHeader(stringResource(R.string.carlink_settings_group_levels)) }) {
         ChoiceRow(stringResource(R.string.carlink_settings_level_media), levelLabel(u.mediaLevelDb),
@@ -400,6 +411,7 @@ internal fun methodIcon(method: ConnectionMethod): Int = when (method) {
     ConnectionMethod.SAME_WIFI -> R.drawable.carlink_ic_wifi
     ConnectionMethod.CAR_HOTSPOT -> R.drawable.carlink_ic_wifi_tethering
     ConnectionMethod.WIFI_DIRECT -> R.drawable.carlink_ic_p2p
+    ConnectionMethod.HEADUNIT_SERVER -> R.drawable.carlink_ic_phone_android
 }
 
 internal fun dayNightIcon(mode: DayNight): Int = when (mode) {

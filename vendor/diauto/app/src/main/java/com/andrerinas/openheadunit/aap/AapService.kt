@@ -806,6 +806,9 @@ class AapService : Service(), UsbReceiver.Listener {
                 nativeAaHandshakeManager?.isHandoffSettling() == true
         }
         wifiDirectManager?.setNativeSessionConnectedProvider { commManager.isConnected }
+        wifiDirectManager?.setNativeCredentialsDeliveredProvider {
+            nativeAaHandshakeManager?.lastCredentialsDeliveredAtMs() ?: 0L
+        }
         wifiDirectManager?.setNativeGroupInvalidatedListener { nativeAaHandshakeManager?.invalidateCredentials() }
         softApCredentialsProvider?.setCredentialsListener { ssid, psk, ip, bssid ->
             onNativeCredentials(ssid, psk, ip, bssid)
@@ -1116,6 +1119,7 @@ class AapService : Service(), UsbReceiver.Listener {
                     val keyEvent = mediaButtonEvent?.let { IntentCompat.getParcelableExtra(it, Intent.EXTRA_KEY_EVENT, android.view.KeyEvent::class.java) }
 
                     if (keyEvent != null) {
+                        if (HostIntegration.onLearnMediaButton?.invoke(keyEvent) == true) return true // CarLink: wheel Learn (#81)
                         val actionStr = if (keyEvent.action == android.view.KeyEvent.ACTION_DOWN) "DOWN" else "UP"
                         AppLog.d("MediaButtonEvent: Received key ${keyEvent.keyCode} ($actionStr)")
 

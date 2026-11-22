@@ -54,6 +54,8 @@ class AaSessionTrackerTest {
         t.event(EngineEvent.FIRST_VIDEO_FRAME)
         assertEquals(listOf(AdapterEvent.Restart("the screen turned portrait")),
             t.event(EngineEvent.ORIENTATION_CHANGED, "picture=1920x1080;screen=portrait"))
+        assertEquals(listOf(AdapterEvent.Restart("the projection window changed shape")),
+            t.event(EngineEvent.ORIENTATION_CHANGED, "cause=window-shape"))
     }
 
     @Test fun aStateReportWithAFrameAlsoConnects() {
@@ -367,6 +369,12 @@ class AaSessionTrackerTest {
         val t = self()
         assertFalse(t.shouldRepoke(now + limits.acceptHintMillis))
         assertEquals(FailureReason.HEAD_UNIT_SERVER_OFF, t.event(EngineEvent.HEAD_UNIT_SERVER_CLOSED).failure().reason)
+    }
+
+    @Test fun aStuckHeadUnitServerFailsAtTheFirstSilentHandshake() {
+        val failure = self().event(EngineEvent.HEAD_UNIT_SERVER_STUCK, "endpoint=127.0.0.1:5277;count=1").failure()
+        assertEquals(FailureReason.HEAD_UNIT_SERVER_STUCK, failure.reason)
+        assertEquals(com.carlink.core.core.LinkProblem.HEAD_UNIT_SERVER_STUCK, failure.reason.toLinkProblem())
     }
 
     @Test fun selfModeWaitsWithoutTimeoutAndFailsOnADrop() {

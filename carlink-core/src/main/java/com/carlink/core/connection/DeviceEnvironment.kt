@@ -17,6 +17,7 @@ import com.carlink.core.detect.PhoneClassifier
 import com.carlink.core.diagnostics.EventLog
 import com.carlink.core.entry.UsbRouterActivity
 import com.carlink.core.settings.CarLinkPreferences
+import com.carlink.core.settings.ConnectionMethod
 import com.carlink.core.settings.WifiEnvironmentReader
 import com.carlink.core.settings.UnifiedSettingsStore
 import com.carlink.core.settings.WirelessPath
@@ -35,6 +36,8 @@ class DeviceEnvironment(
     private val knownPhones = KnownPhones(app)
     private val paths = PathMemory(app)
     private val callMicrophone = CallMicrophoneWatch(app)
+    private val fyt = FytHeadUnit.createIfFyt(app)
+    private val qzd = QzdHeadUnit.createIfPresent(app)
 
     override val autoConnectUsb get() = preferences.autoConnectUsb
     override val autoConnectBluetooth get() = preferences.autoConnectBluetooth
@@ -42,25 +45,30 @@ class DeviceEnvironment(
         get() = preferences.autoConnectPaused
         set(value) { preferences.autoConnectPaused = value }
 
+    // The head unit server needs no Bluetooth, so a stereo whose Bluetooth CarLink cannot use still has it (#70).
     override fun wirelessUnavailable(engine: Engine): Boolean =
-        wirelessBlocked(effectiveStereo(app), preferences.wirelessOnExternalBluetooth, engine)
+        !(engine == Engine.ANDROID_AUTO && unified.load().connectionMethod == ConnectionMethod.HEADUNIT_SERVER) &&
+            wirelessBlocked(effectiveStereo(app), preferences.wirelessOnExternalBluetooth, engine)
 
     private val rechecking = java.util.concurrent.atomic.AtomicBoolean(false)
+    /** The latest blocked request's engine and callback: a second block while a recheck runs replaces the first. */
+    @Volatile private var recheck: Pair<Engine, () -> Unit>? = null
 
-    override fun recheckStereo(changed: () -> Unit) {
-        if (ExternalBluetoothProbe.settled() || !rechecking.compareAndSet(false, true)) return
+    override fun recheckStereo(engine: Engine, changed: () -> Unit) {
+        if (ExternalBluetoothProbe.settled()) return
+        recheck = engine to changed
+        if (!rechecking.compareAndSet(false, true)) return
         Thread({
             try {
-                val before = ExternalBluetoothProbe.cached()?.classification
                 // The probe re-takes at most every 3 s and is final 180 s after the first one.
-                while (!ExternalBluetoothProbe.settled() && ExternalBluetoothProbe.cached()?.classification == before) {
+                while (!ExternalBluetoothProbe.settled() && recheck?.first?.let(::wirelessUnavailable) == true) {
                     Thread.sleep(3_000)
                     runCatching { ExternalBluetoothProbe.await(app) }
                 }
             } finally {
                 rechecking.set(false)
             }
-            changed()
+            recheck?.second?.invoke()
         }, "carlink-stereo-recheck").apply { isDaemon = true }.start()
     }
 
@@ -90,6 +98,14 @@ class DeviceEnvironment(
             lastWorking = request.phoneAddress?.let { paths.lastWorking(request.engine, it) },
             wifiDirect = WifiDirectSupport.supported(app),
         ))
+    }
+
+    override fun carPlayPictureNeverCame() {
+        CarPlayHevcMemory(app).onNoPicture()
+    }
+
+    override fun carPlayPictureCame() {
+        CarPlayHevcMemory(app).onPicture()
     }
 
     override fun rememberWorkingPath(engine: Engine, phoneAddress: String, path: WirelessPath) {
@@ -161,6 +177,8 @@ class DeviceEnvironment(
      */
     override fun onEngaged(engine: Engine?) {
         callMicrophone.setWatching(engine != null)
+        fyt?.engaged(engine)
+        qzd?.engaged(engine != null)
         if (preferences.rootMode) kotlin.concurrent.thread(name = "carlink-root") { com.carlink.core.settings.RootMode.projecting(engine != null) }
         val state = if (engine == Engine.ANDROID_AUTO) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
         else PackageManager.COMPONENT_ENABLED_STATE_DISABLED

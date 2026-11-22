@@ -198,6 +198,7 @@ internal fun connectionMethodLabel(method: ConnectionMethod): String = stringRes
         ConnectionMethod.SAME_WIFI -> R.string.carlink_settings_method_same_wifi
         ConnectionMethod.CAR_HOTSPOT -> R.string.carlink_settings_method_hotspot
         ConnectionMethod.WIFI_DIRECT -> R.string.carlink_settings_method_direct
+        ConnectionMethod.HEADUNIT_SERVER -> R.string.carlink_settings_method_server
     },
 )
 
@@ -239,6 +240,7 @@ internal fun interfaceSizeLabel(size: InterfaceSize): String = stringResource(
         InterfaceSize.SMALL -> R.string.carlink_settings_size_small
         InterfaceSize.MEDIUM -> R.string.carlink_settings_size_medium
         InterfaceSize.LARGE -> R.string.carlink_settings_size_large
+        InterfaceSize.EXTRA_LARGE -> R.string.carlink_settings_size_extra_large
         InterfaceSize.CUSTOM -> R.string.carlink_settings_custom
     },
 )

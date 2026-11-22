@@ -118,6 +118,7 @@ internal fun SettingsSheetHost(key: String?, ui: SettingsUi, actions: SettingsAc
                     ConnectionMethod.SAME_WIFI -> R.string.carlink_settings_method_same_wifi_detail
                     ConnectionMethod.CAR_HOTSPOT -> R.string.carlink_settings_method_hotspot_detail
                     ConnectionMethod.WIFI_DIRECT -> R.string.carlink_settings_method_direct_detail
+                    ConnectionMethod.HEADUNIT_SERVER -> R.string.carlink_settings_method_server_detail
                 }), methodIcon(m))
             },
             u.connectionMethod, onSelect = { m -> select { it.copy(connectionMethod = m) } }, onDismiss = onDismiss,
@@ -150,11 +151,13 @@ internal fun SettingsSheetHost(key: String?, ui: SettingsUi, actions: SettingsAc
             stringResource(R.string.carlink_settings_interface_size), stringResource(R.string.carlink_settings_interface_size_detail), true,
             listOf(
                 Preset(InterfaceSize.SMALL, interfaceSizeLabel(InterfaceSize.SMALL), stringResource(R.string.carlink_settings_size_small_detail),
-                    preview = { ScalePreview(0.8f) }),
-                Preset(InterfaceSize.MEDIUM, interfaceSizeLabel(InterfaceSize.MEDIUM), stringResource(R.string.carlink_settings_size_medium_detail),
                     preview = { ScalePreview(1f) }),
-                Preset(InterfaceSize.LARGE, interfaceSizeLabel(InterfaceSize.LARGE), stringResource(R.string.carlink_settings_size_large_detail),
+                Preset(InterfaceSize.MEDIUM, interfaceSizeLabel(InterfaceSize.MEDIUM), stringResource(R.string.carlink_settings_size_medium_detail),
                     preview = { ScalePreview(1.25f) }),
+                Preset(InterfaceSize.LARGE, interfaceSizeLabel(InterfaceSize.LARGE), stringResource(R.string.carlink_settings_size_large_detail),
+                    preview = { ScalePreview(1.55f) }),
+                Preset(InterfaceSize.EXTRA_LARGE, interfaceSizeLabel(InterfaceSize.EXTRA_LARGE),
+                    stringResource(R.string.carlink_settings_size_extra_large_detail), preview = { ScalePreview(1.85f) }),
             ) + customPreset(u.interfaceSize == InterfaceSize.CUSTOM, InterfaceSize.CUSTOM),
             u.interfaceSize, onSelect = { s -> select { it.copy(interfaceSize = s) } }, onDismiss = onDismiss,
         )

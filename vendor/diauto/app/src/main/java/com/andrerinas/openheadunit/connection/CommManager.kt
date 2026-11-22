@@ -464,6 +464,13 @@ class CommManager(
         silentPeerFailures =
             UnresponsivePeerPolicy.countAfterSilentFailure(silentPeerFailures, silentPeerEndpoint, endpoint)
         silentPeerEndpoint = endpoint
+        // CarLink: say so at once, so the host can stop and explain instead of retrying a server
+        // that will not answer until it is restarted.
+        if (endpoint?.endsWith(":5277") == true) {
+            com.andrerinas.openheadunit.HostIntegration.engineEvent(context,
+                com.andrerinas.openheadunit.HostIntegration.EngineEvent.HEAD_UNIT_SERVER_STUCK,
+                "endpoint=$endpoint;count=$silentPeerFailures")
+        }
         // Only Android Auto's head unit server — the peer on 5277, so the discovery path and Self
         // Mode — has something the user can restart. The phone dialling our own server on 5288 and
         // the Nearby helper can both reach this branch, and sending their users into Android Auto's
@@ -548,6 +555,9 @@ class CommManager(
         // _transport, so a user's exit from the phone (VIDEO_FOCUS_NATIVE) was always published
         // as isUserExit=false and the service reconnected 1.5 s later (#35).
         _connectionState.value = ConnectionState.Disconnected(isClean, isUserExit = wasUserExit)
+        // The lock stays, as it always has on this path, but the session's hold on its resolution
+        // ends with it: the next one is announced for the window as it is by then.
+        HeadUnitScreenConfig.endSession()
         // Transport already quit on its own — no ByeByeRequest needed (connection is dead).
         _disconnectJob = _scope.launch { doDisconnect(sendByeBye = false) }
         if (settings.killOnDisconnect) {

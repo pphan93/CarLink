@@ -69,7 +69,7 @@ class ExternalBluetoothProbeTest {
         val markers = mapOf("rw.zlink.bt.type" to "extra")
         val bondedPhone = mapOf(phone to PhoneKind.IPHONE)
         val real = AdapterFacts(present = true, enabled = true, addressReal = true)
-        // Power-up (2026-11-10 log): no daemon yet, Bluetooth still off → EXTERNAL_UNKNOWN, not final.
+        // Power-up (2026-11-10 log): no daemon yet, Bluetooth still off: EXTERNAL_UNKNOWN, not final.
         val early = Stereo(props = markers, adapter = AdapterFacts(true, false, null), bonded = null, known = bondedPhone).probe()
         assertEquals(StereoBluetooth.EXTERNAL_UNKNOWN, early.classification)
         assertTrue(early.provisional)

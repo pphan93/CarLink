@@ -99,7 +99,7 @@ object Connection {
     private fun logPrewarmSkipped() {
         if (prewarmSkipLogged.compareAndSet(false, true)) {
             com.carlink.core.diagnostics.EventLog.add("CarLink",
-                "Android Auto engine not prewarmed: little memory and no Android phone known (it starts when one connects)")
+                "Android Auto engine not prewarmed: no Android phone known (it starts when one connects)")
         }
     }
 
@@ -228,7 +228,8 @@ object Connection {
         val wifi = WifiEnvironmentReader.read(app, stored)
         val settings = effectiveSettings(stored, wifi)
         val profile = vehicleProfile(app)
-        val picture = automaticPicture(app, settings)
+        // Every start, so the HEVC fallback knows whether this attempt sends HEVC (presets: never).
+        val picture = CarPlayHevcMemory(app).apply(automaticPicture(app, settings))
         when (plan.engine) {
             Engine.CARPLAY -> {
                 // CarLink: wireless CarPlay's iAP2 link through the stereo's module (opt-in).
@@ -258,7 +259,8 @@ object Connection {
                 }
                 val values = AaSessionSettings.values(settings, plan.transport, plan.path, profile,
                     carName = CarLinkCore.config.accessoryName, panelDensityDpi = app.resources.displayMetrics.densityDpi, wifi = wifi,
-                    picture = picture, moduleRoute = moduleRoute)
+                    picture = picture, moduleRoute = moduleRoute,
+                    bydHeadUnit = VehicleProfile.detect(app) == VehicleProfile.BYD_DILINK)
                 values.problem?.let { Log.w(TAG, "Android Auto settings: $it") }
                 AaSessionSettings.apply(app, values)
             }

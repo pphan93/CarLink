@@ -495,6 +495,8 @@ class CarLinkViewModel(application: Application) : AndroidViewModel(application)
         if (next == _unified.value) return
         _unified.value = next
         unifiedStore.save(next)
+        // Read at each navigation prompt, so it applies to a running CarPlay session at once (#83).
+        com.shilapi.xcertplay.media.HostAudio.duckMediaForPrompts = next.duckMusicForDirections
         // Engines read their settings at the start of each session (SessionManager writes them).
         refreshNetwork()
         session.onSettingsChanged()
@@ -521,7 +523,7 @@ class CarLinkViewModel(application: Application) : AndroidViewModel(application)
         com.carlink.core.core.LinkProblem.OVERLAY -> Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
             android.net.Uri.parse("package:${app.packageName}"))
         // Android Auto's own settings screen (the one DiAuto's Self Mode opens); its version row unlocks developer settings.
-        com.carlink.core.core.LinkProblem.HEAD_UNIT_SERVER_OFF -> Intent().setClassName(ANDROID_AUTO_PACKAGE,
+        com.carlink.core.core.LinkProblem.HEAD_UNIT_SERVER_OFF, com.carlink.core.core.LinkProblem.HEAD_UNIT_SERVER_STUCK -> Intent().setClassName(ANDROID_AUTO_PACKAGE,
             "$ANDROID_AUTO_PACKAGE.companion.settings.DefaultSettingsActivity")
         else -> null
     }
@@ -544,7 +546,8 @@ class CarLinkViewModel(application: Application) : AndroidViewModel(application)
                         app.startActivity(Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }
                     // An Android Auto without that screen: its app info page still opens it.
-                    if (problem == com.carlink.core.core.LinkProblem.HEAD_UNIT_SERVER_OFF) runCatching {
+                    if (problem == com.carlink.core.core.LinkProblem.HEAD_UNIT_SERVER_OFF ||
+                        problem == com.carlink.core.core.LinkProblem.HEAD_UNIT_SERVER_STUCK) runCatching {
                         app.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                             android.net.Uri.parse("package:$ANDROID_AUTO_PACKAGE")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }

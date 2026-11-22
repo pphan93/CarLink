@@ -202,6 +202,10 @@ private fun homeEntries(): List<GalleryEntry> = with(HomeFakes) { listOf(
     home("failed-external-module") {
         HomeContent(ui(link = failed(LinkProblem.EXTERNAL_MODULE, engine = Engine.ANDROID_AUTO), phones = listOf(pixel)), actions)
     },
+    // Android Auto's head unit server took the connection and went silent: restart it (#84).
+    home("failed-head-unit-server-stuck") {
+        HomeContent(ui(link = failed(LinkProblem.HEAD_UNIT_SERVER_STUCK, engine = Engine.ANDROID_AUTO), phones = listOf(pixel)), actions)
+    },
     home("failed-engine") {
         HomeContent(ui(link = failed(LinkProblem.ENGINE, engine = Engine.ANDROID_AUTO), phones = listOf(pixel, iphone)), actions)
     },
@@ -259,6 +263,12 @@ private fun diagnosticsEntries(): List<GalleryEntry> = listOf(
         DiagnosticsContent(DiagnosticsUi(LinkState.Idle, null, null, previewChecks, previewLog()), GalleryDiagnosticsActions)
         com.carlink.app.ui.diagnostics.IssueConfirmSheet(com.carlink.app.ui.diagnostics.previewIssueReport(), onOpen = {}, onCopyLog = {}, onCancel = {})
     },
+    // The same sheet on an old version, for a report already sent an hour ago: update first, send again.
+    GalleryEntry("diagnostics", "report-confirm-resend", opensWindow = true, configs = setOf("tablet", "car-landscape", "phone-portrait")) {
+        DiagnosticsContent(DiagnosticsUi(LinkState.Idle, null, null, previewChecks, previewLog()), GalleryDiagnosticsActions)
+        com.carlink.app.ui.diagnostics.IssueConfirmSheet(com.carlink.app.ui.diagnostics.previewIssueReport(), onOpen = {}, onCopyLog = {},
+            onCancel = {}, sentAtMillis = System.currentTimeMillis() - 3_600_000, newerVersion = "1.0.16", installedVersion = "1.0.13")
+    },
     GalleryEntry("diagnostics", "report-qr", opensWindow = true, configs = setOf("tablet", "car-landscape", "phone-portrait")) {
         DiagnosticsContent(DiagnosticsUi(LinkState.Idle, null, null, previewChecks, previewLog()), GalleryDiagnosticsActions)
         com.carlink.app.ui.diagnostics.IssueQrSheet(com.carlink.app.ui.diagnostics.previewIssueReport(), onShareLog = {}, onCopyLog = {}, onDone = {})
@@ -293,6 +303,13 @@ private fun settingsEntries(): List<GalleryEntry> = listOf(
         SettingsContent(settingsPreviewUi(showAdvanced = true).copy(stereoBluetoothExternal = true, stereoBluetoothFyt = true,
             connection = settingsPreviewUi().connection.copy(wirelessOnExternalBluetooth = true)), SettingsPreviewActions, onBack = {},
             startCategory = SettingsCategory.CONNECTION)
+    },
+    // Same Wi-Fi over a wired Ethernet link (#87, advanced): the switch under the Same Wi-Fi row.
+    GalleryEntry("settings", "connection-same-wifi-wired") {
+        val ui = settingsPreviewUi(showAdvanced = true)
+        SettingsContent(ui.copy(unified = ui.unified.copy(connectionMethod = com.carlink.core.settings.ConnectionMethod.SAME_WIFI,
+            homeWifi = com.carlink.core.settings.WifiDetails("HomeNet", "homepassword"), sameWifiWired = true)),
+            SettingsPreviewActions, onBack = {}, startCategory = SettingsCategory.CONNECTION)
     },
     // Root mode on (advanced): the switch and what it does.
     GalleryEntry("settings", "connection-root") {

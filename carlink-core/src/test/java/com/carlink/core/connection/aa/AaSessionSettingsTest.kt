@@ -22,8 +22,8 @@ class AaSessionSettingsTest {
 
     private fun values(settings: UnifiedSettings = base, transport: Transport = Transport.WIRELESS,
                        path: WirelessPath? = WirelessPath.WIFI_DIRECT, profile: VehicleProfile = VehicleProfile.GENERIC,
-                       wifi: WifiEnvironment? = null) =
-        AaSessionSettings.values(settings, transport, path, profile, "My Car", 320, wifi)
+                       wifi: WifiEnvironment? = null, bydHeadUnit: Boolean = profile == VehicleProfile.BYD_DILINK) =
+        AaSessionSettings.values(settings, transport, path, profile, "My Car", 320, wifi, bydHeadUnit = bydHeadUnit)
 
     @Test fun everySessionWritesTheHostOwnedKeys() {
         for (path in listOf(WirelessPath.WIFI_DIRECT, WirelessPath.CAR_HOTSPOT)) {
@@ -113,7 +113,7 @@ class AaSessionSettingsTest {
         assertEquals(2, v["resolutionId"])
         assertEquals(30, v["fps-limit"])
         assertEquals(0, v["dpi-pixel-density"])
-        for ((size, percent) in listOf(InterfaceSize.SMALL to 80, InterfaceSize.MEDIUM to 100, InterfaceSize.LARGE to 135)) {
+        for ((size, percent) in listOf(InterfaceSize.SMALL to 100, InterfaceSize.MEDIUM to 135, InterfaceSize.LARGE to 165, InterfaceSize.EXTRA_LARGE to 200)) {
             val sized = values(settings = base.copy(interfaceSize = size)).values
             assertEquals(0, sized["dpi-pixel-density"])
             assertEquals(percent, sized[AaSessionSettings.SIZE_PERCENT_KEY])
@@ -170,5 +170,31 @@ class AaSessionSettingsTest {
             assertEquals("every session writes $key", 0, normal[key])
         }
         assertEquals(false, normal[AaSessionSettings.RESUME_MUSIC_KEY])
+    }
+
+    @Test fun headUnitServerUsesTheEnginesDiscoveryMode() { // #70
+        val v = values(path = WirelessPath.HEADUNIT_SERVER).values
+        assertEquals(1, v["wifi-connection-mode"])
+        assertEquals(0, v["native-ap-transport"])
+        assertEquals("", v["hotspot-ssid"])
+        // USB sessions keep native Android Auto.
+        assertEquals(3, values(transport = Transport.USB, path = null).values["wifi-connection-mode"])
+    }
+
+    /** Upright on the 2560x1600 tablet (320 dpi), Android Auto stops near Medium; sideways every size grows (2026-11-18). */
+    @Test fun aTurningScreenUprightStopsGrowingAtMedium() {
+        val upright = AaSessionSettings.turningMaxPercent(320, 1600, 2560)
+        assertTrue("$upright", upright in 120..134)
+        assertEquals(listOf(InterfaceSize.SMALL, InterfaceSize.MEDIUM), AaSessionSettings.sizesThatGrow(upright))
+        val sideways = AaSessionSettings.turningMaxPercent(320, 2560, 1600)
+        assertEquals(InterfaceSize.entries.filter { it != InterfaceSize.CUSTOM }, AaSessionSettings.sizesThatGrow(sideways))
+    }
+
+    /** A phone or tablet set to BYD keeps Android Auto's music; a real DiLink sends it over the car's Bluetooth. */
+    @Test fun bydBluetoothMusicOnlyOnARealDiLink() {
+        val tablet = values(profile = VehicleProfile.BYD_DILINK, bydHeadUnit = false).values
+        assertEquals(false, tablet["music-via-bluetooth"])
+        val dilink = values(profile = VehicleProfile.BYD_DILINK, bydHeadUnit = true).values
+        assertEquals(true, dilink["music-via-bluetooth"])
     }
 }

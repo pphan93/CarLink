@@ -39,6 +39,7 @@ object AaEngineHooks {
         if (installed) return
         installed = true
         val app = context.applicationContext
+        com.carlink.core.settings.WheelMediaLearning.installAndroidAuto(app)
         HostIntegration.stickyService = false
         HostIntegration.restartOnTaskRemoved = false
         HostIntegration.claimHiddenBottomStrip = false
@@ -120,8 +121,8 @@ object AaEngineHooks {
         com.carlink.core.connection.PicturePolicy.turningHighRes(com.carlink.core.connection.DeviceCapabilities.read(app))
     }.getOrDefault(false).also { highResCapable = it }
 
-    /** Small: the size a turning screen connects at, so every interface size is reachable live. */
-    private const val LIVE_BASE_PERCENT = 80
+    /** Small: the size a turning screen connects at, so every interface size is reachable live (and the sharpest). */
+    private const val LIVE_BASE_PERCENT = 100
 
     /**
      * Interface size during a session. The phone takes the density only at connect, but on a turning

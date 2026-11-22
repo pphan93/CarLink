@@ -63,7 +63,9 @@
     <string name="carlink_settings_method_same_wifi_detail">Phone and car on one router, the fastest path. Needs the Wi-Fi password once.</string>
     <string name="carlink_settings_method_hotspot_detail">The phone joins the Wi-Fi hotspot the car creates. Works with every phone.</string>
     <string name="carlink_settings_method_direct_detail">A direct link between phone and car. No network needed.</string>
-    <string name="carlink_settings_method_sheet_body">Bluetooth always starts the connection; the picture and sound then travel over Wi-Fi.</string>
+    <string name="carlink_settings_method_server">Head unit server</string>
+    <string name="carlink_settings_method_server_detail">Android Auto backup: this screen joins the phone\'s hotspot. Turn on Start head unit server on the phone.</string>
+    <string name="carlink_settings_method_sheet_body">Bluetooth starts the connection (not with Head unit server); the picture and sound then travel over Wi-Fi.</string>
 
     <string name="carlink_settings_hotspot">Car hotspot</string>
     <string name="carlink_settings_hotspot_detail">Name and password of the car’s own hotspot</string>
@@ -75,6 +77,8 @@
     <string name="carlink_settings_hotspot_not_applied">Saved in CarLink. This stereo does not let CarLink change its hotspot: set the same name and password in the car’s hotspot settings.</string>
     <string name="carlink_settings_same_wifi">Same Wi-Fi network</string>
     <string name="carlink_settings_same_wifi_detail">The router both the car and your iPhone join</string>
+    <string name="carlink_settings_same_wifi_wired">Over a wired network (Ethernet)</string>
+    <string name="carlink_settings_same_wifi_wired_detail">CarPlay only. This screen is on the router by cable (a USB Ethernet adapter); the iPhone still joins the Wi-Fi above.</string>
     <string name="carlink_settings_same_wifi_sheet_body">The car must already be on this Wi-Fi. CarLink tells your iPhone to join it over Bluetooth.</string>
     <string name="carlink_settings_wifi_name">Network name</string>
     <string name="carlink_settings_wifi_password">Password</string>
@@ -114,6 +118,7 @@
     <string name="carlink_settings_size_small_detail">More fits on the screen</string>
     <string name="carlink_settings_size_medium_detail">Recommended</string>
     <string name="carlink_settings_size_large_detail">Easier to read and tap</string>
+    <string name="carlink_settings_size_extra_large_detail">For a screen far from the driver</string>
     <string name="carlink_settings_daynight">Day and night</string>
     <string name="carlink_settings_daynight_detail">When maps and screens turn dark</string>
     <string name="carlink_settings_daynight_auto">Automatic</string>
@@ -163,6 +168,8 @@
     <string name="carlink_settings_call_stream_media_detail">For head units that play calls too quietly or not at all. The other person may hear an echo: if so, turn on Call echo cancellation under Show advanced, or go back to Phone call.</string>
     <string name="carlink_settings_resume_music">Resume music after reconnecting</string>
     <string name="carlink_settings_resume_music_detail">If music was playing when the phone disconnected, press play once it is back</string>
+    <string name="carlink_settings_duck_directions">Lower music during directions</string>
+    <string name="carlink_settings_duck_directions_detail">CarPlay turns its music down while a navigation prompt speaks</string>
     <string name="carlink_settings_group_microphone">Microphone</string>
     <string name="carlink_settings_mic_gain">Microphone level</string>
     <string name="carlink_settings_mic_gain_detail">How loud your voice reaches calls and the voice assistant</string>

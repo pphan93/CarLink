@@ -69,6 +69,10 @@ data class CarPlayEngineSettings(
     /** Calls play as media (`HostAudio.callsAsMedia`, GitHub #32). */
     val callAudioAsMedia: Boolean = false,
     val resumeMusic: Boolean = false,
+    /** Music lowered during navigation prompts (`HostAudio.duckMediaForPrompts`, GitHub #83). */
+    val duckMusicForDirections: Boolean = true,
+    /** Same Wi-Fi over this screen's Ethernet: DiPlay attaches to that interface, not to Wi-Fi (#87). */
+    val sameWifiWired: Boolean = false,
 )
 
 /** The vehicle-profile part of [CarPlayEngineSettings] (DIPLAY.md §12, F5). */
@@ -97,8 +101,6 @@ enum class CarLinkAppearance { FOLLOW_SYSTEM, DARK, LIGHT }
 
 /** Pure translation from CarLink's settings to DiPlay's, so every rule is unit tested. */
 object CarPlaySettingsPolicy {
-    /** Interface size Medium: the screen's long side told to the iPhone, in mm (Android Auto on a phone or tablet follows it). */
-    const val MEDIUM_WIDTH_MM = 300
 
     /**
      * CarLink's theme at the time of a write; the app sets it at start-up. The default, dark,
@@ -117,9 +119,12 @@ object CarPlaySettingsPolicy {
 
     /** The screen width told to the iPhone for [size]; null leaves DiPlay's own (Custom). */
     fun widthMm(size: InterfaceSize): Int? = when (size) {
-        InterfaceSize.SMALL -> 350
-        InterfaceSize.MEDIUM -> MEDIUM_WIDTH_MM
-        InterfaceSize.LARGE -> 220 // 250 looked too close to Medium on a tablet (2026-11-12)
+        // Shifted up two steps on 2026-11-18 (the driver's call on the tablet): 350 and 300 mm drew
+        // CarPlay too small to use, so Small starts at 220 mm. Android Auto shifted one step (AaSessionSettings).
+        InterfaceSize.SMALL -> 220
+        InterfaceSize.MEDIUM -> 180 // #83: 220 was still small on a 10" stereo
+        InterfaceSize.LARGE -> 150
+        InterfaceSize.EXTRA_LARGE -> 120
         InterfaceSize.CUSTOM -> null
     }
 
@@ -148,7 +153,7 @@ object CarPlaySettingsPolicy {
                 WirelessPath.SAME_WIFI -> WirelessHotspotMode.EXISTING_WIFI
                 WirelessPath.CAR_HOTSPOT -> WirelessHotspotMode.MANUAL
                 WirelessPath.WIFI_DIRECT -> WirelessHotspotMode.WIFI_P2P
-                null -> null
+                WirelessPath.HEADUNIT_SERVER, null -> null // Android Auto only
             },
             displayScalePercent = scale,
             fps = fps,
@@ -205,6 +210,8 @@ object CarPlaySettingsPolicy {
             micGainDb = settings.micGainDb,
             callAudioAsMedia = settings.callAudioAsMedia,
             resumeMusic = settings.resumeMusic,
+            duckMusicForDirections = settings.duckMusicForDirections,
+            sameWifiWired = settings.sameWifiWired,
         )
     }
 
@@ -237,12 +244,16 @@ object CarPlaySettingsPolicy {
         AirPlayPersistence.saveManualHotspotSecurity(context, ManualHotspotValidation.securityFor(values.carHotspot.password))
         // Same Wi-Fi: always CarLink's values, also when cleared (F17: stale details).
         AirPlayPersistence.saveExistingWifiCredentials(context, values.homeWifi.ssid, values.homeWifi.password)
+        // DiPlay's explicit interface skips its Wi-Fi checks; empty keeps its own Wi-Fi selection.
+        AirPlayPersistence.saveExistingWifiInterface(context,
+            if (values.sameWifiWired) WiredNetwork.interfaceName(context).orEmpty() else "")
 
         CarPlayHostIntegration.keyRemap = values.wheelKeyRemap
         // Read by each new audio stream and microphone; null hooks leave DiPlay's audio untouched.
         HostAudio.playbackPcm = AudioLevels.carPlayPlayback(values.mediaLevelDb, values.navigationLevelDb, values.callLevelDb)
         HostAudio.microphonePcm = AudioLevels.pcmGain(values.micGainDb)
         HostAudio.callsAsMedia = values.callAudioAsMedia
+        HostAudio.duckMediaForPrompts = values.duckMusicForDirections
         resumeMusic = values.resumeMusic
         if (BydOutputSettings.carPlayCallControls(context) != values.callKeys) {
             BydOutputSettings.setCarPlayCallControls(context, values.callKeys)

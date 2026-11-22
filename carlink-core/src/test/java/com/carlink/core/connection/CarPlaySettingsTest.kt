@@ -52,12 +52,20 @@ class CarPlaySettingsTest {
 
     @Test fun pictureSizeAndNightKeepTheVerifiedMapping() {
         val best = map(UnifiedSettings(picture = Picture.BEST, interfaceSize = InterfaceSize.SMALL, dayNight = DayNight.SCHEDULE))
-        assertEquals(100, best.displayScalePercent); assertEquals(60, best.fps); assertEquals(350, best.widthPhysicalMm)
+        assertEquals(100, best.displayScalePercent); assertEquals(60, best.fps); assertEquals(220, best.widthPhysicalMm)
         assertEquals("schedule", best.nightModeKey)
         val custom = map(UnifiedSettings(picture = Picture.CUSTOM, interfaceSize = InterfaceSize.CUSTOM))
         assertNull(custom.displayScalePercent); assertNull(custom.fps); assertNull(custom.widthPhysicalMm)
         assertEquals(75, map(UnifiedSettings(picture = Picture.LIGHT)).displayScalePercent)
         assertEquals("system", map().nightModeKey)
+    }
+
+    /** Every preset width is one the Advanced list offers, so choosing Advanced never shows an unknown value (#83). */
+    @Test fun presetWidthsAreOnTheAdvancedList() {
+        assertEquals(120, map(UnifiedSettings(interfaceSize = InterfaceSize.EXTRA_LARGE)).widthPhysicalMm)
+        val offered = (com.carlink.core.settings.AdvancedSettings.all.first { it.id == "cp_width" }.control
+            as com.carlink.core.settings.Control.Choice).options.map { it.value.toInt() }
+        InterfaceSize.entries.mapNotNull(CarPlaySettingsPolicy::widthMm).forEach { assertTrue("$it mm", it in offered) }
     }
 
     @Test fun audioDelayMapsToDiPlaysMusicBuffers() {
@@ -81,6 +89,9 @@ class CarPlaySettingsTest {
         assertNotNull(HostAudio.microphonePcm)
         assertTrue(HostAudio.callsAsMedia)
         assertTrue(CarPlaySettingsPolicy.resumeMusic)
+        assertTrue(HostAudio.duckMediaForPrompts) // on by default (#83)
+        CarPlaySettingsPolicy.apply(app, map(UnifiedSettings(duckMusicForDirections = false)))
+        assertFalse(HostAudio.duckMediaForPrompts)
         // Back to Normal: DiPlay's own audio path, untouched.
         CarPlaySettingsPolicy.apply(app, map())
         assertNull(HostAudio.playbackPcm)
