@@ -4,7 +4,7 @@ CarLink's releases, newest first. Versions follow `major.minor.patch`; each one 
 [GitHub](https://github.com/pphan93/CarLink/releases) with its APK. The text under each version
 is what the in-app update popup shows.
 
-## [Unreleased]
+## [1.0.27] - 2026-11-26
 
 From upstream CarLink 1.0.18:
 
