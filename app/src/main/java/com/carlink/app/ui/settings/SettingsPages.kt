@@ -61,7 +61,7 @@ internal fun CategoryPage(
             SettingsCategory.DISPLAY -> DisplayEssentials(ui, openSheet)
             SettingsCategory.SOUND -> SoundEssentials(ui, actions, openSheet)
             SettingsCategory.NAVIGATION -> NavigationEssentials(ui, actions)
-            SettingsCategory.CAR -> CarEssentials(ui, openSheet)
+            SettingsCategory.CAR -> CarEssentials(ui, actions, openSheet)
             SettingsCategory.GENERAL -> GeneralEssentials(ui, actions, openSheet, versionTaps, onVersionTap)
         }
         if (ui.unified.showAdvanced) EngineSection(category, Tier.ADVANCED, ui, actions, openSheet)
@@ -164,18 +164,30 @@ private fun ConnectionEssentials(ui: SettingsUi, actions: SettingsActions, openS
 private fun PausedCard(onResume: () -> Unit) {
     val colors = CarLinkTokens.colors
     GlassCard(Modifier.fillMaxWidth(), contentPadding = androidx.compose.foundation.layout.PaddingValues(rowPadding)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(if (isCar) 14.dp else 10.dp).clip(CircleShape).background(colors.warning))
-            Spacer(Modifier.width(if (isCar) 20.dp else 14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.carlink_settings_paused_title), style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface)
-                Spacer(Modifier.height(4.dp))
-                Text(stringResource(R.string.carlink_settings_paused_body), style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+        androidx.compose.foundation.layout.BoxWithConstraints {
+            // On a narrow screen the button goes under the words; beside them the text was squeezed into a sliver.
+            val stacked = maxWidth < 480.dp
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(if (isCar) 14.dp else 10.dp).clip(CircleShape).background(colors.warning))
+                    Spacer(Modifier.width(if (isCar) 20.dp else 14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.carlink_settings_paused_title), style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface)
+                        Spacer(Modifier.height(4.dp))
+                        Text(stringResource(R.string.carlink_settings_paused_body), style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (!stacked) {
+                        Spacer(Modifier.width(CarLinkTokens.dimens.gutter))
+                        IonButton(stringResource(R.string.carlink_settings_resume), onResume, icon = R.drawable.carlink_ic_play_arrow_filled)
+                    }
+                }
+                if (stacked) {
+                    Spacer(Modifier.height(CarLinkTokens.dimens.gutter))
+                    IonButton(stringResource(R.string.carlink_settings_resume), onResume, icon = R.drawable.carlink_ic_play_arrow_filled)
+                }
             }
-            Spacer(Modifier.width(CarLinkTokens.dimens.gutter))
-            IonButton(stringResource(R.string.carlink_settings_resume), onResume, icon = R.drawable.carlink_ic_play_arrow_filled)
         }
     }
 }
@@ -275,7 +287,7 @@ private fun NavigationEssentials(ui: SettingsUi, actions: SettingsActions) {
 }
 
 @Composable
-private fun CarEssentials(ui: SettingsUi, openSheet: (String) -> Unit) {
+private fun CarEssentials(ui: SettingsUi, actions: SettingsActions, openSheet: (String) -> Unit) {
     val right = ui.unified.rightHandDrive
     GlassGroup(header = { GroupHeader(stringResource(R.string.carlink_settings_group_car)) }) {
         ChoiceRow(stringResource(R.string.carlink_settings_driving_side),
@@ -294,6 +306,11 @@ private fun CarEssentials(ui: SettingsUi, openSheet: (String) -> Unit) {
             else pluralStringResource(R.plurals.carlink_wheel_keys_value, learned, learned),
             { openSheet(SheetKey.of(EssentialSheet.WHEEL_KEYS)) },
             description = stringResource(R.string.carlink_wheel_keys_detail), icon = R.drawable.carlink_ic_search_hands_free,
+            tags = { NextConnectionTag() })
+        GroupDivider()
+        SwitchRow(stringResource(R.string.carlink_settings_aa_back), ui.unified.androidAutoBack,
+            { on -> actions.update { it.copy(androidAutoBack = on) } },
+            description = stringResource(R.string.carlink_settings_aa_back_detail), icon = R.drawable.carlink_ic_android,
             tags = { NextConnectionTag() })
     }
 }

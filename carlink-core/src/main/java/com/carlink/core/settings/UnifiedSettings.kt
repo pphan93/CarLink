@@ -44,6 +44,13 @@ data class UnifiedSettings(
     val sameWifiWired: Boolean = false,
     /** Software gain on the microphone sent to the phone ([AudioLevels.MIC_DB]). */
     val micGainDb: Int = 0,
+    /**
+     * Android Auto's size, percent of its Automatic density, under [InterfaceSize.CUSTOM] while the Advanced
+     * DPI stays Automatic (set from the switcher's Custom size). CarPlay's custom size is DiPlay's own width.
+     */
+    val customSizePercent: Int = 100,
+    /** The head unit's Back key goes back inside Android Auto (GitHub #72); off, it opens the session menu. */
+    val androidAutoBack: Boolean = true,
 )
 
 data class WifiDetails(val ssid: String = "", val password: String = "")
@@ -76,7 +83,8 @@ class UnifiedSettingsStore(context: Context) {
         dayNight = enumOr(prefs.getString("day_night", null), DayNight.AUTOMATIC),
         nightStartMinute = prefs.getInt("night_start", 19 * 60),
         nightEndMinute = prefs.getInt("night_end", 7 * 60),
-        rightHandDrive = prefs.getBoolean("right_hand_drive", false),
+        rightHandDrive = driveSide(prefs.getBoolean(KEY_DRIVE_SIDE_CHOSEN, false), prefs.getBoolean("right_hand_drive", false),
+            if (prefs.contains(KEY_STEREO_RIGHT)) prefs.getBoolean(KEY_STEREO_RIGHT, false) else null),
         soundThroughCarBluetooth = prefs.getBoolean("sound_car_bluetooth", false),
         // Until saved once, follow the Music buffer an earlier version set in DiPlay (500 ms or 1 s was High).
         audioDelay = enumOr(prefs.getString("audio_delay", null),
@@ -94,10 +102,15 @@ class UnifiedSettingsStore(context: Context) {
         duckMusicForDirections = prefs.getBoolean("duck_music_directions", true),
         sameWifiWired = prefs.getBoolean("same_wifi_wired", false),
         micGainDb = prefs.getInt("mic_gain_db", 0),
+        customSizePercent = prefs.getInt("custom_size_percent", 100),
+        androidAutoBack = prefs.getBoolean("android_auto_back", true),
     )
 
     fun save(settings: UnifiedSettings) {
+        // The driving side counts as chosen once the driver changes it from what CarLink showed.
+        val sideChosen = prefs.getBoolean(KEY_DRIVE_SIDE_CHOSEN, false) || settings.rightHandDrive != load().rightHandDrive
         prefs.edit()
+            .putBoolean(KEY_DRIVE_SIDE_CHOSEN, sideChosen)
             .putString("connection_method", settings.connectionMethod.name)
             .putString("car_hotspot_ssid", settings.carHotspot.ssid)
             .putString("car_hotspot_password", settings.carHotspot.password)
@@ -108,7 +121,8 @@ class UnifiedSettingsStore(context: Context) {
             .putString("day_night", settings.dayNight.name)
             .putInt("night_start", settings.nightStartMinute)
             .putInt("night_end", settings.nightEndMinute)
-            .putBoolean("right_hand_drive", settings.rightHandDrive)
+            // Unchosen, the stored side stays as it was: writing the stereo's default would make it look chosen.
+            .apply { if (sideChosen) putBoolean("right_hand_drive", settings.rightHandDrive) }
             .putBoolean("sound_car_bluetooth", settings.soundThroughCarBluetooth)
             .putString("audio_delay", settings.audioDelay.name)
             .putBoolean("send_location", settings.sendCarLocation)
@@ -124,13 +138,29 @@ class UnifiedSettingsStore(context: Context) {
             .putBoolean("duck_music_directions", settings.duckMusicForDirections)
             .putBoolean("same_wifi_wired", settings.sameWifiWired)
             .putInt("mic_gain_db", settings.micGainDb)
+            .putInt("custom_size_percent", settings.customSizePercent)
+            .putBoolean("android_auto_back", settings.androidAutoBack)
             .apply()
     }
 
     private inline fun <reified T : Enum<T>> enumOr(name: String?, default: T): T =
         name?.let { runCatching { enumValueOf<T>(it) }.getOrNull() } ?: default
 
-    private companion object {
-        const val PREFS = "carlink_unified"
+    /** The driver side an FYT/Joying stereo reported (HeadUnitSignals); the default until the driver chooses. */
+    fun saveStereoDriveSide(right: Boolean) {
+        prefs.edit().putBoolean(KEY_STEREO_RIGHT, right).apply()
+    }
+
+    companion object {
+        private const val PREFS = "carlink_unified"
+        private const val KEY_DRIVE_SIDE_CHOSEN = "drive_side_chosen"
+        private const val KEY_STEREO_RIGHT = "stereo_right_hand_drive"
+
+        /**
+         * Right-hand drive: the driver's choice once made, or a stored right (before the marker existed,
+         * right could only be the driver's choice), else the stereo's driver side, else left.
+         */
+        fun driveSide(chosen: Boolean, storedRight: Boolean, stereoRight: Boolean?): Boolean =
+            if (chosen || storedRight) storedRight else stereoRight ?: false
     }
 }

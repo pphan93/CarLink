@@ -73,6 +73,8 @@ data class CarPlayEngineSettings(
     val duckMusicForDirections: Boolean = true,
     /** Same Wi-Fi over this screen's Ethernet: DiPlay attaches to that interface, not to Wi-Fi (#87). */
     val sameWifiWired: Boolean = false,
+    /** Stream types per DiPlay audio channel for a stereo that sorts sources by stream (Joying, [QzdHeadUnit.audioStreams]). */
+    val legacyStreamTypes: Map<String, Int> = emptyMap(),
 )
 
 /** The vehicle-profile part of [CarPlayEngineSettings] (DIPLAY.md §12, F5). */
@@ -114,10 +116,43 @@ object CarPlaySettingsPolicy {
     var resumeMusic: Boolean = false
         private set
 
+    private const val DIPLAY_PREFS = "xcertplay_airplay"
+    private const val CLEAR_PROMPTS_DEFAULTED = "carlink_clear_prompts_defaulted"
+
     /** DiPlay's own default OEM label (AirPlayPersistence.DEFAULT_OEM_LABEL, DIPLAY.md §12 row 15). */
     const val DIPLAY_DEFAULT_OEM_LABEL = "BYD"
 
     /** The screen width told to the iPhone for [size]; null leaves DiPlay's own (Custom). */
+    /** The switcher's Custom size range for CarPlay (DiPlay accepts 100-400 mm in 5 mm steps). */
+    /** DiPlay's whole range (AirPlayDisplaySettings sanitizes the saved width to it). */
+    val CUSTOM_WIDTH_RANGE_MM = com.shilapi.xcertplay.airplay.AirPlayDisplaySettings.MIN_WIDTH_PHYSICAL_MM..
+        com.shilapi.xcertplay.airplay.AirPlayDisplaySettings.MAX_WIDTH_PHYSICAL_MM
+
+    /**
+     * The widths each session declares as areas, so the switcher changes size live: the presets, the saved
+     * width and its neighbours 5 and 10 % either way (the switcher's steps), so stepping around a custom size stays
+     * live. Kept short: every width is one more view area in the iPhone's display description.
+     */
+    fun liveWidthsMm(savedMm: Int): List<Int> {
+        val percent = percentForWidth(savedMm)
+        return (InterfaceSize.entries.mapNotNull(::widthMm) + savedMm +
+            listOf(-10, -5, 5, 10).map { widthForPercent(percent + it) }).distinct()
+    }
+
+    /**
+     * The switcher's Custom size for CarPlay as a percent, the unit Android Auto's uses: 100 % is Small
+     * (220 mm), and CarPlay draws larger in proportion as the width it is told shrinks.
+     */
+    fun percentForWidth(widthMm: Int): Int = Math.round(SIZE_PERCENT_BASE_MM * 100f / widthMm)
+
+    fun widthForPercent(percent: Int): Int =
+        Math.round(SIZE_PERCENT_BASE_MM * 100f / percent.coerceAtLeast(1)).coerceIn(CUSTOM_WIDTH_RANGE_MM)
+
+    private const val SIZE_PERCENT_BASE_MM = 220
+
+    /** DiPlay's whole width range (400 to 100 mm) as percents: about 55 to 220 %. */
+    val CUSTOM_PERCENT_RANGE: IntRange get() = percentForWidth(CUSTOM_WIDTH_RANGE_MM.last)..percentForWidth(CUSTOM_WIDTH_RANGE_MM.first)
+
     fun widthMm(size: InterfaceSize): Int? = when (size) {
         // Shifted up two steps on 2026-11-18 (the driver's call on the tablet): 350 and 300 mm drew
         // CarPlay too small to use, so Small starts at 220 mm. Android Auto shifted one step (AaSessionSettings).
@@ -136,6 +171,7 @@ object CarPlaySettingsPolicy {
         brandName: String = "CarLink",
         picture: PictureChoice = PicturePolicy.ENGINE_DEFAULTS,
         appearance: CarLinkAppearance = runCatching { this.appearance() }.getOrDefault(CarLinkAppearance.DARK),
+        audioStreams: Map<String, Int> = emptyMap(),
     ): CarPlayEngineSettings {
         // Picture and size: v1's settings mapping (verified correct, F17); Automatic follows the
         // device's decoder ([PicturePolicy]: DiPlay's own 100 % / 30 fps unless the decoder needs less).
@@ -212,6 +248,7 @@ object CarPlaySettingsPolicy {
             resumeMusic = settings.resumeMusic,
             duckMusicForDirections = settings.duckMusicForDirections,
             sameWifiWired = settings.sameWifiWired,
+            legacyStreamTypes = audioStreams,
         )
     }
 
@@ -248,12 +285,23 @@ object CarPlaySettingsPolicy {
         AirPlayPersistence.saveExistingWifiInterface(context,
             if (values.sameWifiWired) WiredNetwork.interfaceName(context).orEmpty() else "")
 
+        // #83: over USB the iPhone chose 8 kHz phone-quality PCM for directions and Siri's replies, the lowest
+        // rate offered. DiPlay's opt-in stops offering 8 and 16 kHz there (24 kHz in a BYD, DiPlay #1186).
+        // CarLink turns it on once; the Advanced switch (cp_clear_prompts) can turn it off again.
+        val diPlayPrefs = context.getSharedPreferences(DIPLAY_PREFS, Context.MODE_PRIVATE)
+        if (!diPlayPrefs.getBoolean(CLEAR_PROMPTS_DEFAULTED, false)) {
+            AirPlayPersistence.saveSpeechWithout8And16Khz(context, true)
+            diPlayPrefs.edit().putBoolean(CLEAR_PROMPTS_DEFAULTED, true).apply()
+        }
+
+        CarPlayHostIntegration.liveSizeWidthsMm = liveWidthsMm(AirPlayPersistence.loadWidthPhysicalMm(context))
         CarPlayHostIntegration.keyRemap = values.wheelKeyRemap
         // Read by each new audio stream and microphone; null hooks leave DiPlay's audio untouched.
         HostAudio.playbackPcm = AudioLevels.carPlayPlayback(values.mediaLevelDb, values.navigationLevelDb, values.callLevelDb)
         HostAudio.microphonePcm = AudioLevels.pcmGain(values.micGainDb)
         HostAudio.callsAsMedia = values.callAudioAsMedia
         HostAudio.duckMediaForPrompts = values.duckMusicForDirections
+        HostAudio.legacyStreamTypes = values.legacyStreamTypes
         resumeMusic = values.resumeMusic
         if (BydOutputSettings.carPlayCallControls(context) != values.callKeys) {
             BydOutputSettings.setCarPlayCallControls(context, values.callKeys)

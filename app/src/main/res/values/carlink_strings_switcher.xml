@@ -2,7 +2,6 @@
 <resources>
     <!-- Floating switcher: the bubble over CarPlay / Android Auto and the panel it opens. -->
     <string name="carlink_switcher_bubble">CarLink switcher</string>
-    <string name="carlink_switcher_bubble_action">Open phone switcher</string>
     <!-- %1$s: time connected, e.g. 12:04 -->
     <string name="carlink_switcher_connected_for">Connected · %1$s</string>
     <string name="carlink_switcher_switch_title">Switch phone</string>
@@ -10,9 +9,19 @@
     <string name="carlink_switcher_no_phones_hint">Pair another phone in Bluetooth settings to switch to it here.</string>
     <string name="carlink_switcher_switching">Switching…</string>
     <string name="carlink_switcher_home">CarLink Home</string>
-    <string name="carlink_switcher_size_reconnects">Changing it reconnects for a few seconds</string>
+    <string name="carlink_switcher_size_reconnects">A larger size changes at once; a smaller one needs a reconnect</string>
+    <string name="carlink_switcher_size_pending">Saved. This size needs a new connection; the picture keeps its size until then.</string>
+    <string name="carlink_switcher_size_reconnect">Reconnect with the new size</string>
     <!-- Android Auto on a tablet held upright: larger sizes would break its layout. %1$s: a size name. -->
     <string name="carlink_switcher_size_upright">Held upright, Android Auto stops at %1$s</string>
+    <!-- Custom interface size (#83): a stepper between the presets. -->
+    <string name="carlink_switcher_custom_size">Custom size</string>
+    <string name="carlink_switcher_custom_size_carplay">100% is Small. A higher value draws CarPlay larger.</string>
+    <string name="carlink_switcher_custom_size_aa">100% is Small. A higher value draws Android Auto larger.</string>
+    <string name="carlink_switcher_custom_size_apply">Use this size</string>
+    <!-- %1$d: CarPlay screen width in millimetres. -->
+    <!-- %1$d: Android Auto size in percent of its automatic size. -->
+    <string name="carlink_switcher_size_percent">%1$d%%</string>
     <string name="carlink_switcher_next_connection">The current session keeps its connection.</string>
     <string name="carlink_switcher_close">Close</string>
     <string name="carlink_switcher_back">Back</string>

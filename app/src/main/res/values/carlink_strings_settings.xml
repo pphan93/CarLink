@@ -30,7 +30,6 @@
     <string name="carlink_settings_loading">Loading…</string>
     <string name="carlink_settings_not_set">Not set</string>
     <string name="carlink_settings_done">Done</string>
-    <string name="carlink_settings_close">Close</string>
 
     <!-- Connection -->
     <string name="carlink_settings_group_start">Start</string>
@@ -147,9 +146,9 @@
     <string name="carlink_settings_audio_delay_low">Low</string>
     <string name="carlink_settings_audio_delay_normal">Normal</string>
     <string name="carlink_settings_audio_delay_high">High</string>
-    <string name="carlink_settings_audio_delay_low_detail">Sound closest to the picture: about 0.1 s over USB. Wireless stays at 0.3 s. Try Normal if music stutters.</string>
-    <string name="carlink_settings_audio_delay_normal_detail">About 0.3 s over USB and wireless. Recommended.</string>
-    <string name="carlink_settings_audio_delay_high_detail">Steadiest music on a weak link: about 0.5 s over USB, 1 s wireless.</string>
+    <string name="carlink_settings_audio_delay_low_detail">Sound closest to the picture: about 0.1\u00A0s over USB. Wireless stays at 0.3\u00A0s. Try Normal if music stutters.</string>
+    <string name="carlink_settings_audio_delay_normal_detail">About 0.3\u00A0s over USB and wireless. Recommended.</string>
+    <string name="carlink_settings_audio_delay_high_detail">Steadiest music on a weak link: about 0.5\u00A0s over USB, 1\u00A0s wireless.</string>
     <string name="carlink_settings_group_levels">Levels</string>
     <string name="carlink_settings_level_media">Media</string>
     <string name="carlink_settings_level_media_detail">Music, podcasts and other media</string>
@@ -157,7 +156,7 @@
     <string name="carlink_settings_level_navigation_detail">Spoken directions and the voice assistant</string>
     <string name="carlink_settings_level_calls">Calls</string>
     <string name="carlink_settings_level_calls_detail">CarPlay calls. Android Auto calls go through the car’s Bluetooth hands-free.</string>
-    <string name="carlink_settings_level_sheet_body">Louder or quieter than the phone sends it, for both CarPlay and Android Auto. Above Normal, very loud passages can distort.</string>
+    <string name="carlink_settings_level_sheet_body">Louder or quieter than the phone sends it, for both CarPlay and Android Auto. Above Normal, the loudest peaks are softened so they do not crackle.</string>
     <string name="carlink_settings_level_normal">Normal</string>
     <string name="carlink_settings_level_db">%1$s dB</string>
     <string name="carlink_settings_call_stream">Call audio plays as</string>
@@ -168,6 +167,8 @@
     <string name="carlink_settings_call_stream_media_detail">For head units that play calls too quietly or not at all. The other person may hear an echo: if so, turn on Call echo cancellation under Show advanced, or go back to Phone call.</string>
     <string name="carlink_settings_resume_music">Resume music after reconnecting</string>
     <string name="carlink_settings_resume_music_detail">If music was playing when the phone disconnected, press play once it is back</string>
+    <string name="carlink_settings_aa_back">Back button goes back in Android Auto</string>
+    <string name="carlink_settings_aa_back_detail">Off: Back opens the menu to leave Android Auto. Either way, swipe in from the left edge with two fingers for that menu.</string>
     <string name="carlink_settings_duck_directions">Lower music during directions</string>
     <string name="carlink_settings_duck_directions_detail">CarPlay turns its music down while a navigation prompt speaks</string>
     <string name="carlink_settings_group_microphone">Microphone</string>

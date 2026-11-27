@@ -90,6 +90,11 @@ private fun aaToggle(key: String, default: Boolean) =
 private fun aaIntChoice(key: String, default: Int, options: List<SettingOption>) =
     Control.Choice(options, { it.aaInt(key, default).toString() }, { access, value -> access.putAa(key, value.toInt()) })
 
+/** 10 mm steps where the presets sit (#83: the sweet spot was between Large's 150 and Medium's 180 mm), wider above. */
+private val widthOptions = ((120..200 step 10) + listOf(220, 250, 300, 350, 400)).map {
+    SettingOption(it.toString(), when (it) { 120 -> "120 mm (largest)"; 400 -> "400 mm (smallest)"; else -> "$it mm" })
+}
+
 /** Android audio stream choices DiPlay accepts (0 = by usage, otherwise a legacy stream type). */
 private val audioStreams = options(0 to "Automatic", 3 to "Media", 4 to "Alarm", 5 to "Notification", 1 to "System", 10 to "Accessibility")
 
@@ -102,7 +107,7 @@ object AdvancedSettings {
         // ---------- CarPlay: display ----------
         AdvancedSetting("cp_scale", Engine.CARPLAY, SettingsCategory.DISPLAY, Tier.ADVANCED,
             "Resolution", "Picture size relative to the screen. Higher is sharper and works the head unit harder.",
-            Applies.NEXT_CONNECTION, carPlayIntChoice(options(50 to "50 %", 75 to "75 %", 100 to "100 %", 125 to "125 %", 150 to "150 %"),
+            Applies.NEXT_CONNECTION, carPlayIntChoice(options(50 to "50%", 75 to "75%", 100 to "100%", 125 to "125%", 150 to "150%"),
                 AirPlayPersistence::loadDisplayScalePercent, AirPlayPersistence::saveDisplayScalePercent), Overrides.PICTURE),
         AdvancedSetting("cp_fps", Engine.CARPLAY, SettingsCategory.DISPLAY, Tier.ADVANCED,
             "Frame rate", "60 fps is smoother; 30 fps is lighter on older head units.",
@@ -110,7 +115,7 @@ object AdvancedSettings {
                 AirPlayPersistence::loadFps, AirPlayPersistence::saveFps), Overrides.PICTURE),
         AdvancedSetting("cp_width", Engine.CARPLAY, SettingsCategory.DISPLAY, Tier.ADVANCED,
             "Screen width reported to iPhone", "A wider screen makes CarPlay's icons and text smaller.",
-            Applies.NEXT_CONNECTION, carPlayIntChoice(options(120 to "120 mm (largest)", 150 to "150 mm", 180 to "180 mm", 200 to "200 mm", 220 to "220 mm", 250 to "250 mm", 300 to "300 mm", 350 to "350 mm", 400 to "400 mm (smallest)"),
+            Applies.NEXT_CONNECTION, carPlayIntChoice(widthOptions,
                 AirPlayPersistence::loadWidthPhysicalMm, AirPlayPersistence::saveWidthPhysicalMm), Overrides.INTERFACE_SIZE),
         AdvancedSetting("cp_dock", Engine.CARPLAY, SettingsCategory.DISPLAY, Tier.ADVANCED,
             "Dock position", "Where CarPlay shows its row of apps.",
@@ -164,12 +169,22 @@ object AdvancedSettings {
             Applies.NEXT_CONNECTION, carPlayToggle(AirPlayPersistence::loadMainBufferedAudio) { c, v ->
                 c.getSharedPreferences("xcertplay_airplay", Context.MODE_PRIVATE).edit().putBoolean("main_buffered_audio", v).apply()
             }),
+        // #83, DiPlay #148: on by default (CarPlaySettingsPolicy.apply); off is the way back if directions go silent.
+        AdvancedSetting("cp_clear_prompts", Engine.CARPLAY, SettingsCategory.SOUND, Tier.ADVANCED,
+            "Clear navigation voice over USB", "Asks the iPhone for directions and Siri's replies above phone quality (8 kHz). Turn it off if directions go silent.",
+            Applies.NEXT_CONNECTION, carPlayToggle(AirPlayPersistence::loadSpeechWithout8And16Khz, AirPlayPersistence::saveSpeechWithout8And16Khz)),
         AdvancedSetting("cp_echo", Engine.CARPLAY, SettingsCategory.SOUND, Tier.ADVANCED,
             "Call echo cancellation", "Reduce the echo the other person hears on calls.",
             Applies.NEXT_CONNECTION, carPlayToggle(AirPlayPersistence::loadCallEchoCancellation, AirPlayPersistence::saveCallEchoCancellation)),
         AdvancedSetting("cp_voice", Engine.CARPLAY, SettingsCategory.SOUND, Tier.ADVANCED,
             "Clearer call voices", "Filter road noise from your voice on calls.",
             Applies.NEXT_CONNECTION, carPlayToggle(AirPlayPersistence::loadCallVoiceFilter, AirPlayPersistence::saveCallVoiceFilter)),
+
+        // ZLink's is_cp_mic_force_8k and SpeedPlay's 8/16 kHz recorder (re-headunit-apps zlink.md, speedplay.md):
+        // some stereos' microphones and echo cancellers work only at call rates. DiPlay's own opt-in, USB only.
+        AdvancedSetting("cp_call_rate", Engine.CARPLAY, SettingsCategory.SOUND, Tier.LAB,
+            "Calls at phone-call rate", "Over USB, calls and their microphone use 8 to 32 kHz audio, as stock CarPlay stereos do, instead of 48 kHz. Try it if the other person hears you choppy or robotic; turn it off if a call has no sound.",
+            Applies.NEXT_CONNECTION, carPlayToggle(AirPlayPersistence::loadCallAtCallRate, AirPlayPersistence::saveCallAtCallRate)),
 
         // ---------- CarPlay: connection, car, lab ----------
         AdvancedSetting("cp_p2p_channel", Engine.CARPLAY, SettingsCategory.CONNECTION, Tier.ADVANCED,
@@ -246,6 +261,16 @@ object AdvancedSettings {
         AdvancedSetting("aa_playback_focus", Engine.ANDROID_AUTO, SettingsCategory.SOUND, Tier.ADVANCED,
             "Pause other audio", "Whether the car's own audio pauses while Android Auto plays.",
             Applies.NEXT_CONNECTION, aaIntChoice("playback-focus-mode", 0, options(0 to "Automatic", 1 to "Always", 2 to "Never"))),
+        // #86: DiAuto's audio buffer (AudioTrack size = minimum × this; directions and Assistant are capped at 4×).
+        AdvancedSetting("aa_audio_buffer", Engine.ANDROID_AUTO, SettingsCategory.SOUND, Tier.ADVANCED,
+            "Audio buffer", "How much sound the head unit holds back. Smaller cuts the music's delay; larger stops stutter.",
+            Applies.NEXT_CONNECTION, aaIntChoice("audio-latency-multiplier", 8, options(1 to "1× (shortest delay)", 2 to "2×",
+                4 to "4×", 8 to "8× (default, steadiest)"))),
+        // #86: chunks waiting for the buffer; when full the phone's stream is slowed instead of piling up delay. 0 = unbounded.
+        AdvancedSetting("aa_audio_queue", Engine.ANDROID_AUTO, SettingsCategory.SOUND, Tier.ADVANCED,
+            "Audio queue", "How much sound can wait before it plays. Shorter keeps music in step with the picture.",
+            Applies.NEXT_CONNECTION, aaIntChoice("audio-queue-capacity", 50, options(10 to "10 chunks (shortest delay)",
+                20 to "20 chunks", 50 to "50 chunks (default)", 0 to "Unlimited"))),
         // Music, directions and Assistant volume are CarLink's Sound levels (UnifiedSettings), written each session.
         AdvancedSetting("aa_mic_source", Engine.ANDROID_AUTO, SettingsCategory.SOUND, Tier.ADVANCED,
             "Microphone", "Which microphone Android Auto listens with.",

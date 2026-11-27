@@ -4,6 +4,55 @@ CarLink's releases, newest first. Versions follow `major.minor.patch`; each one 
 [GitHub](https://github.com/pphan93/CarLink/releases) with its APK. The text under each version
 is what the in-app update popup shows.
 
+## [Unreleased]
+
+From upstream CarLink 1.0.18:
+
+- UI polish from a full-app check: the floating ball's "Wireless · Wi-Fi Direct" badge has its own row
+  and no longer wraps, and "Extra large" is no longer cut to "Extra" on a phone; the long failure screens
+  fit a car screen; Report a problem gives its details more room (the header's close button replaces
+  Cancel); the paused card in Settings › Connection stacks on a phone; setup no longer shows the
+  plugged-in phone twice; "0.3 s" and "Phone · CarPlay" no longer break mid-value.
+- Fixed: wireless CarPlay started again right after a stop could sit on "Linking over Wi-Fi" for
+  10 s and fail once before connecting. When the iPhone joins the car's Wi-Fi but does not open
+  CarPlay within 3 s, CarLink now asks it to start once more.
+- The floating ball no longer reconnects by itself when a size cannot change live (a CarPlay width wider than
+  the one the session started with): it saves the size and offers **Reconnect with the new size**.
+- New Lab option for CarPlay calls over USB, "Calls at phone-call rate": calls and their microphone
+  use 8-32 kHz audio as stock CarPlay stereos do, for stereos where the other person hears you
+  choppy or robotic.
+- The floating switcher has a Custom size, in percent for both CarPlay and Android Auto (100% is
+  Small), with −10, −5, +5 and +10 steps and no 250 mm limit. It is saved as Settings' Custom size
+  and applies live where the session can (#83).
+- Joying (QZD) stereos: CarPlay and Android Auto directions and the voice assistant now play on the
+  streams the stereo treats as navigation and voice, so they mix over music instead of being muted
+  with it; CarPlay calls use the stereo's call stream when its settings name one.
+- Fixed: CarPlay directions over USB sounded like a phone call (#83). The iPhone picked 8 kHz audio
+  for them; CarLink now asks for a higher rate. If directions go silent on your stereo, turn off
+  Settings › Sound & voice › Show advanced › Clear navigation voice over USB.
+- CarPlay's "Screen width reported to iPhone" (Advanced) now has 10 mm steps from 120 to 200 mm,
+  so a size between the Large and Medium presets can be picked (#83).
+- Navigation volume now goes up to +12 dB (Settings › Sound & voice), for CarPlay and Android Auto;
+  boosted sound has its loudest peaks softened instead of clipped (#83).
+- Fixed: on a phone, Home's dial no longer cuts off the connection step ("Reaching phone",
+  "Phone answered") under the CarPlay or Android Auto name while connecting.
+- Fixed: the delete button next to each phone in Home's Phones list is as large as the other car
+  buttons (76 dp on a head unit), so it is easier to hit while parked.
+- The head unit's Back button now goes back inside Android Auto instead of opening the menu to
+  leave it (#72), also on Android 13 and later. Turn it off in Settings › Car › Back button goes back in Android Auto; the
+  two-finger swipe from the left edge still opens the menu. Home stays the system's.
+- Android Auto's audio buffer and audio queue can be set under Settings › Sound & voice › Show
+  advanced (smaller = less music delay, larger = less stutter; from the next connection). Defaults
+  are unchanged (#86).
+- FYT and Joying stereos: with Day and night on Automatic, CarPlay and Android Auto turn dark when
+  the car's lights come on, following the stereo's own light signal.
+- The stereo's voice key can open Siri or Google Assistant during a session: CarLink now answers the
+  voice-command request Joying stereos send (pick CarLink when the stereo asks which app to use).
+  With no session it passes the press on to the screen's own assistant.
+- FYT and Joying stereos: when the car is switched on, CarLink connects the last phone as soon as
+  Bluetooth is back, even if the previous drive ended only minutes ago (the stop rules still apply).
+- FYT and Joying stereos: Driving side starts from the side the stereo reports, until you choose one.
+
 ## [1.0.26] - 2026-11-22
 
 - Back: the upstream CarLink 1.0.16 additions removed in 1.0.23 (live interface size, Screen

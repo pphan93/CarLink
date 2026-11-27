@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -36,6 +37,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -49,6 +52,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.carlink.app.R
@@ -81,11 +85,10 @@ import com.carlink.core.settings.ConnectionMethod
 import com.carlink.core.settings.DayNight
 import com.carlink.app.ui.settings.dayNightIcon
 import com.carlink.app.ui.settings.dayNightLabel
-import androidx.compose.foundation.layout.fillMaxHeight
 import com.carlink.core.settings.InterfaceSize
 import com.carlink.core.settings.WirelessPath
 
-enum class SwitcherPage { MAIN, CONNECTION_TYPE }
+enum class SwitcherPage { MAIN, CONNECTION_TYPE, CUSTOM_SIZE }
 
 /** Everything the switcher panel shows; built by SwitcherController, faked by the gallery. */
 @Immutable
@@ -109,6 +112,10 @@ data class SwitcherUi(
     val interfaceSize: InterfaceSize = InterfaceSize.MEDIUM,
     /** Sizes that would show larger right now; null = all (Android Auto upright on a tablet stops at Medium). */
     val sizesThatGrow: List<InterfaceSize>? = null,
+    /** The custom size in the running engine's unit: CarPlay's screen width in mm, Android Auto's percent. */
+    val customSize: Int = 165,
+    /** A size was saved that the running session could not take live: the panel offers to reconnect. */
+    val sizePending: Boolean = false,
     /** Day/night for both engines; applies from the next connection. */
     val dayNight: DayNight = DayNight.AUTOMATIC,
     /** The screen dimmer's step (0 = off), an index into switcher/ScreenDimmer.ALPHAS. */
@@ -127,6 +134,10 @@ interface SwitcherActions {
     fun showPage(page: SwitcherPage) {}
     fun setConnectionMethod(method: ConnectionMethod) {}
     fun setInterfaceSize(size: InterfaceSize) {}
+    /** The Custom size page: [value] in [SwitcherUi.customSize]'s unit, saved as Settings' Custom size. */
+    fun setCustomSize(value: Int) {}
+    /** Reconnects so a saved size the session could not take live is used. */
+    fun reconnectForSize() {}
     fun disconnect() {}
     fun close() {}
     /** Quick toggles: Day → Night → Automatic ([nextDayNight]). */
@@ -210,6 +221,7 @@ private fun SwitcherCard(ui: SwitcherUi, actions: SwitcherActions, modifier: Mod
                 when (page) {
                     SwitcherPage.MAIN -> MainPage(ui, actions)
                     SwitcherPage.CONNECTION_TYPE -> ConnectionTypePage(ui, actions)
+                    SwitcherPage.CUSTOM_SIZE -> CustomSizePage(ui, actions)
                 }
             }
         }
@@ -238,11 +250,6 @@ private fun MainPage(ui: SwitcherUi, actions: SwitcherActions) {
             Text(engineName(ui.engine), style = MaterialTheme.typography.bodyMedium,
                 color = scheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(8.dp))
-            // Cable or wireless as a badge: a plug with "Cable", or the path's glyph with "Wireless · Wi-Fi Direct".
-            com.carlink.app.ui.premium.TransportBadge(com.carlink.app.ui.premium.transportIcon(ui.transport, ui.path),
-                com.carlink.app.ui.premium.transportLabel(ui.transport, ui.path), tint = colors.success,
-                style = MaterialTheme.typography.labelLarge)
-            Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(if (CarLinkTokens.profile == UiProfile.CAR) 12.dp else 8.dp).clip(CircleShape).background(colors.success))
                 Spacer(Modifier.width(8.dp))
@@ -254,6 +261,11 @@ private fun MainPage(ui: SwitcherUi, actions: SwitcherActions) {
         Spacer(Modifier.width(12.dp))
         RoundGlassButton(R.drawable.carlink_ic_close, stringResource(R.string.carlink_switcher_close), actions::close)
     }
+    Spacer(Modifier.height(10.dp))
+    // Cable or wireless as a badge on its own row: beside the close button "Wireless · Wi-Fi Direct" wrapped.
+    com.carlink.app.ui.premium.TransportBadge(com.carlink.app.ui.premium.transportIcon(ui.transport, ui.path),
+        com.carlink.app.ui.premium.transportLabel(ui.transport, ui.path), tint = colors.success,
+        style = MaterialTheme.typography.labelLarge)
 
     Spacer(Modifier.height(dimens.gutter))
     QuickToggles(ui, actions, enabled = !switching)
@@ -301,23 +313,48 @@ private fun MainPage(ui: SwitcherUi, actions: SwitcherActions) {
     // A picture too big or too small for this screen: one tap here instead of Settings > Display.
     Eyebrow(stringResource(R.string.carlink_settings_interface_size))
     Spacer(Modifier.height(10.dp))
-    Row(Modifier.alpha(if (switching) 0.5f else 1f), horizontalArrangement = Arrangement.spacedBy(dimens.targetGap)) {
+    Row(Modifier.alpha(if (switching) 0.5f else 1f).height(androidx.compose.foundation.layout.IntrinsicSize.Min),
+        horizontalArrangement = Arrangement.spacedBy(dimens.targetGap)) {
         listOf(InterfaceSize.SMALL, InterfaceSize.MEDIUM, InterfaceSize.LARGE, InterfaceSize.EXTRA_LARGE).forEach { size ->
             val selected = size == ui.interfaceSize
             val grows = ui.sizesThatGrow?.contains(size) ?: true
             SelectableGlass(selected, { if (!switching && !selected && grows) actions.setInterfaceSize(size) },
-                Modifier.weight(1f).alpha(if (grows || selected) 1f else 0.4f), role = Role.RadioButton) {
-                Box(Modifier.fillMaxWidth().defaultMinSize(minHeight = dimens.minTouch).padding(vertical = 12.dp),
+                Modifier.weight(1f).fillMaxHeight().alpha(if (grows || selected) 1f else 0.4f), role = Role.RadioButton) {
+                Box(Modifier.fillMaxSize().defaultMinSize(minHeight = dimens.minTouch).padding(vertical = 12.dp),
                     contentAlignment = Alignment.Center) {
                     Text(com.carlink.app.ui.settings.interfaceSizeLabel(size), style = MaterialTheme.typography.titleSmall,
-                        color = if (selected) scheme.primary else scheme.onSurface, maxLines = 1)
+                        // Two lines: "Extra large" in a phone-width quarter was cut to "Extra".
+                        color = if (selected) scheme.primary else scheme.onSurface, maxLines = 2,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 }
             }
         }
     }
+    Spacer(Modifier.height(dimens.targetGap))
+    // #83: a size between the presets (CarPlay's 150 and 180 mm were too big and too small).
+    val custom = ui.interfaceSize == InterfaceSize.CUSTOM
+    SelectableGlass(custom, { if (!switching) actions.showPage(SwitcherPage.CUSTOM_SIZE) },
+        Modifier.fillMaxWidth().alpha(if (switching) 0.5f else 1f)) {
+        Row(Modifier.defaultMinSize(minHeight = dimens.minTouch).padding(horizontal = dimens.gutter, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.carlink_switcher_custom_size), style = MaterialTheme.typography.titleSmall,
+                color = if (custom) scheme.primary else scheme.onSurface, modifier = Modifier.weight(1f), maxLines = 1)
+            if (custom) Text(customSizeLabel(ui.customSize), style = MaterialTheme.typography.titleSmall,
+                color = scheme.primary, maxLines = 1)
+            Spacer(Modifier.width(8.dp))
+            Icon(painterResource(R.drawable.carlink_ic_chevron_right), null, Modifier.size(dimens.iconTertiary + 4.dp),
+                tint = scheme.onSurfaceVariant)
+        }
+    }
     Spacer(Modifier.height(6.dp))
     val largest = ui.sizesThatGrow?.lastOrNull()
-    Text(if (largest != null && ui.sizesThatGrow.size < 4)
+    if (ui.sizePending) {
+        Text(stringResource(R.string.carlink_switcher_size_pending), style = MaterialTheme.typography.bodySmall,
+            color = scheme.onSurfaceVariant)
+        Spacer(Modifier.height(dimens.targetGap))
+        GlassButton(stringResource(R.string.carlink_switcher_size_reconnect), { if (!switching) actions.reconnectForSize() },
+            Modifier.fillMaxWidth(), icon = R.drawable.carlink_ic_refresh)
+    } else Text(if (largest != null && ui.sizesThatGrow.size < 4)
             stringResource(R.string.carlink_switcher_size_upright, com.carlink.app.ui.settings.interfaceSizeLabel(largest))
         else stringResource(R.string.carlink_switcher_size_reconnects), style = MaterialTheme.typography.bodySmall,
         color = scheme.onSurfaceVariant)
@@ -468,6 +505,50 @@ private fun ConnectionTypePage(ui: SwitcherUi, actions: SwitcherActions) {
         }
     }
 }
+
+@Composable
+/** Both engines' Custom size is a percent (100 % = Small). */
+private fun customSizeLabel(value: Int): String = stringResource(R.string.carlink_switcher_size_percent, value)
+
+/** A stepper for a size between the presets, in CarPlay's millimetres or Android Auto's percent. */
+@Composable
+private fun CustomSizePage(ui: SwitcherUi, actions: SwitcherActions) {
+    val dimens = CarLinkTokens.dimens
+    val scheme = MaterialTheme.colorScheme
+    val carPlay = ui.engine == Engine.CARPLAY
+    val range = if (carPlay) com.carlink.core.connection.CarPlaySettingsPolicy.CUSTOM_PERCENT_RANGE
+        else com.carlink.core.connection.aa.AaSessionSettings.CUSTOM_PERCENT_RANGE
+    var value by remember { mutableIntStateOf(ui.customSize.coerceIn(range)) }
+    // The buttons move the number shown; the hint says which way is larger for this engine.
+    fun step(by: Int) { value = (value + by).coerceIn(range) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RoundGlassButton(R.drawable.carlink_ic_arrow_back, stringResource(R.string.carlink_switcher_back),
+            { actions.showPage(SwitcherPage.MAIN) })
+        Spacer(Modifier.width(dimens.gutter))
+        Text(stringResource(R.string.carlink_switcher_custom_size), style = MaterialTheme.typography.headlineSmall,
+            color = scheme.onSurface, modifier = Modifier.weight(1f).semantics { heading() })
+    }
+    Spacer(Modifier.height(12.dp))
+    Text(stringResource(if (carPlay) R.string.carlink_switcher_custom_size_carplay else R.string.carlink_switcher_custom_size_aa),
+        style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
+    Spacer(Modifier.height(dimens.gutter))
+    Text(customSizeLabel(value), style = MaterialTheme.typography.headlineMedium, color = scheme.primary,
+        textAlign = TextAlign.Center, maxLines = 1, modifier = Modifier.fillMaxWidth())
+    Spacer(Modifier.height(dimens.targetGap))
+    Row(horizontalArrangement = Arrangement.spacedBy(dimens.targetGap)) {
+        SIZE_STEPS.forEach { by ->
+            GlassButton(if (by > 0) "+$by" else "\u2212${-by}", { step(by) }, Modifier.weight(1f))
+        }
+    }
+    Spacer(Modifier.height(dimens.gutter))
+    GlassButton(stringResource(R.string.carlink_switcher_custom_size_apply), { actions.setCustomSize(value) }, Modifier.fillMaxWidth())
+    Spacer(Modifier.height(6.dp))
+    Text(stringResource(R.string.carlink_switcher_size_reconnects), style = MaterialTheme.typography.bodySmall,
+        color = scheme.onSurfaceVariant)
+}
+
+/** The stepper's buttons, in the engine's unit (mm or percent). */
+private val SIZE_STEPS = listOf(-10, -5, 5, 10)
 
 private fun methodDetail(method: ConnectionMethod): Int = when (method) {
     ConnectionMethod.AUTOMATIC -> R.string.carlink_settings_method_auto_detail
